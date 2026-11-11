@@ -98,13 +98,26 @@ CREATE OR REPLACE MACRO ast_get_source_numbered(file_path, start_line, end_line)
 --     normalised: './test/data/python/qualified_names.py' keeps its './' in
 --     both functions. So pairing a './'-prefixed exact path with an unprefixed
 --     glob -- in EITHER direction -- yields 0 ROWS AND NO ERROR.
--- (ast_unparse.sql:562-569 reports a third spelling, Windows native
--- backslashes from the globber. That is not measured here.)
 --
--- ast_unparse_exact_from normalises all three spellings for matching and errors
--- on an unreadable file instead (#89); this macro does not. The path-taking
--- twin cannot reach the state at all, because it derives both arguments from
--- one.
+-- THE SILENT 0 IS A DEFECT, NOT A DECISION, AND IT HAS AN OWNER:
+-- tracker/bugs/058. It breaks the contract at
+-- tracker/features/044-v2-m1-contract.md:16 ("no silent-empty (#89)") and this
+-- stage's own principle at tracker/roadmap/m2-stage3-macro-split-plan.md:60
+-- ("0 rows mean 'searched correctly, not there'"). 058 carries the measurement,
+-- the intended loud-failure shape (normalise the join key, raise on a match
+-- whose file is unreadable) and the reason it is not fixed in this stage: the
+-- join above is now SHARED with the path-taking twin, which delegates here, so
+-- changing it would change the twin's behaviour -- which M2 stage 3 forbids.
+-- ast_unparse_exact_from is the PRECEDENT to follow, not the fix's home: it
+-- normalises for matching (ast_unparse.sql:593) and raises on an unreadable
+-- file (:737). #89 itself is CLOSED (tracker/features/046-cpp-selector-engine.md:4).
+--
+-- ast_unparse.sql:564-569 reports a third spelling, Windows native backslashes
+-- from the globber; that is NOT measured here. Its neighbouring :562-563 says
+-- the globber './'-prefixes relative paths, which DISAGREES with the glob
+-- measurement above and was not reproduced on this build -- the pinned 0 in
+-- column 3 of the test's five-count row decides it, because a './'-prefixing
+-- globber would put './' on both sides and make that cell 3.
 -- ----------------------------------------------------------------------------
 -- ast_source_of_from: Source text for matched nodes in a parsed AST table, read from files
 -- ----------------------------------------------------------------------------

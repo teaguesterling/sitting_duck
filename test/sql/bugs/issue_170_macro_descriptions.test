@@ -32,8 +32,8 @@ require sitting_duck
 # WHICH macros, by name, and not only how many. The floor below catches a
 # shortfall; this names the macro that caused it, and that difference is what
 # ended #170's Windows round. windows_amd64 described 57 of the 58 names this
-# list held then, and this
-# query named the one it lost: ast_unparse_exact_splice.
+# list held then, and this query named the one it lost:
+# ast_unparse_exact_splice.
 #
 # The cause was three layers upstream of the catalog. scripts/embed_sql_macros.py
 # read the .sql files with the locale's encoding, and cp1252 broke the em-dash
