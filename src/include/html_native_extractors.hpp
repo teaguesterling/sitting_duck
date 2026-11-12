@@ -74,8 +74,12 @@ struct HTMLNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS> {
 	static vector<ParameterInfo> ExtractElementAttributes(TSNode node, const string &content) {
 		vector<ParameterInfo> attributes;
 
-		// Find start_tag in element
+		// The attributes are on the element's start_tag, or on its
+		// self_closing_tag for `<img ... />`.
 		TSNode start_tag = FindChildByType(node, "start_tag");
+		if (ts_node_is_null(start_tag)) {
+			start_tag = FindChildByType(node, "self_closing_tag");
+		}
 		if (!ts_node_is_null(start_tag)) {
 			attributes = ExtractTagAttributes(start_tag, content);
 		}

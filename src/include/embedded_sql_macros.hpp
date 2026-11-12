@@ -3065,8 +3065,28 @@ CREATE OR REPLACE MACRO ast_select_from(
         -- column (read_ast(..., peek := 'full')); against a table parsed with
         -- peek := 'none' it raises an error with a re-parse hint. The ast_select
         -- wrapper materializes peek automatically when the selector needs it.
+        --
+        -- HTML elements match by tag and id, as in CSS: `section#week` selects
+        -- <section id="week">. Inside this macro only, an HTML element's `type`
+        -- is its tag (read_ast names an element by its tag) and its `name` is its
+        -- id attribute (from `parameters`; NULL when it has none). Every matching
+        -- path -- simple, combinator, :has(), :not() -- then sees CSS semantics
+        -- with no HTML case of its own. The source's own type and name ride along
+        -- as __src_type/__src_name and are put back on the rows returned, so
+        -- output columns keep read_ast's values (type = 'element').
         ast AS (
-            SELECT * FROM query_table(source)
+            SELECT * REPLACE (
+                       CASE WHEN language = 'html'
+                                 AND type IN ('element', 'script_element', 'style_element')
+                                 AND name IS NOT NULL AND name != ''
+                            THEN name ELSE type END AS type,
+                       CASE WHEN language = 'html'
+                                 AND type IN ('element', 'script_element', 'style_element')
+                            THEN list_filter(parameters, lambda p: p.name = 'id')[1].type
+                            ELSE name END AS name),
+                   type AS __src_type,
+                   name AS __src_name
+            FROM query_table(source)
         ),
 
         -- Find the top-level selector node (skip stylesheet, ERROR, and pseudo_element wrappers)
@@ -3108,6 +3128,9 @@ CREATE OR REPLACE MACRO ast_select_from(
         -- When the CSS parser wraps a combinator selector inside a
         -- pseudo_class_selector (e.g., "A > B:has(X)" parses as
         -- pseudo_class_selector(child_selector(A,B), :has(X))), unwrap to the
+
+)SQLMACRO"
+        R"SQLMACRO(
         -- combinator so the combinator CASE branches fire. The :has / :not /
         -- pseudo-class filters still apply because they iterate over all sel
         -- nodes, not just sel_root.
@@ -3129,9 +3152,6 @@ CREATE OR REPLACE MACRO ast_select_from(
         -- -- and in CSS it constrains that last step, not the pair.
         sel_pseudo_class_unwrap AS (
             SELECT c.node_id
-
-)SQLMACRO"
-        R"SQLMACRO(
             FROM sel c
             LEFT JOIN sel_arg_blocks a
               ON c.node_id > a.node_id
@@ -3361,6 +3381,9 @@ CREATE OR REPLACE MACRO ast_select_from(
         ),
 
         -- .class semantic filter: a class_name whose parent is a class_selector
+
+)SQLMACRO"
+        R"SQLMACRO(
         -- (not a pseudo_class_selector — :has, :not, etc. also have class_name children).
         -- Anti-joins sel_arg_blocks so .class inside :has(.foo) / :not(.foo)
         -- doesn't leak into the top-level class_filter. Joins typed views
@@ -3384,9 +3407,6 @@ CREATE OR REPLACE MACRO ast_select_from(
         -- These precompute "first child of type X inside the args of pcs Y"
         -- relationships so the downstream CTEs can use flat LEFT JOINs instead
         -- of correlated LIMIT 1 scalar subqueries (which trip the planner bug
-
-)SQLMACRO"
-        R"SQLMACRO(
         -- when ast_select is called with a column-valued selector).
         -- =====================================================================
 
@@ -3646,6 +3666,9 @@ CREATE OR REPLACE MACRO ast_select_from(
                    fcn.name AS pseudo_arg_class,   -- a `.class` inside the args (e.g. :is-scope(.fn))
                    fin.name AS pseudo_arg_name,    -- a `#name` inside the args (e.g. :is-scope(.fn#foo))
                    fpv.name AS pseudo_arg_plain,   -- an unquoted plain_value (e.g. the `function#foo` footgun)
+
+)SQLMACRO"
+        R"SQLMACRO(
                    pargs.args_id IS NOT NULL AS has_arg_block,  -- `:calls()` vs bare `:calls` (#191)
                    false as negated
             FROM sel_pseudo_classes pcs
@@ -3668,9 +3691,6 @@ CREATE OR REPLACE MACRO ast_select_from(
                    fcn.name AS pseudo_arg_class,
                    fin.name AS pseudo_arg_name,
                    fpv.name AS pseudo_arg_plain,
-
-)SQLMACRO"
-        R"SQLMACRO(
                    pargs.args_id IS NOT NULL AS has_arg_block,
                    true as negated
             FROM sel_pseudo_classes pcs
@@ -3886,6 +3906,9 @@ CREATE OR REPLACE MACRO ast_select_from(
         --   .fn:calls()                17   no argument at all
         --   .call:called-by(.fn#main)  44   argument ignored
         --
+
+)SQLMACRO"
+        R"SQLMACRO(
         -- 17 is "functions that call anything". The result was plausible and
         -- non-empty, so the caller could not tell the filter had been dropped --
         -- the #184 failure class, where a wrong argument TYPE is accepted and
@@ -3911,9 +3934,6 @@ CREATE OR REPLACE MACRO ast_select_from(
             LIMIT 1
         ),
         name_arg_validation AS (
-
-)SQLMACRO"
-        R"SQLMACRO(
             SELECT CASE
                 WHEN EXISTS (SELECT 1 FROM name_arg_offender) THEN error(format(
                     'ast_select: :{}() takes a function NAME, for example :{}(execute). '
@@ -4119,6 +4139,9 @@ CREATE OR REPLACE MACRO ast_select_from(
         unknown_semantic_class AS (
             SELECT c.cls
             FROM all_semantic_classes c
+
+)SQLMACRO"
+        R"SQLMACRO(
             WHERE NOT EXISTS (SELECT 1 FROM ast_semantic_aliases() a WHERE a.alias = UPPER(c.cls))
               AND semantic_type_code(UPPER(c.cls)) IS NULL
             ORDER BY c.cls
@@ -4143,9 +4166,6 @@ CREATE OR REPLACE MACRO ast_select_from(
                         -- is not a class, but [annotation*="x"] is a real filter.
                         WHEN (SELECT lower(cls) FROM unknown_semantic_class)
                              IN (SELECT name FROM known_attribute_names)
-
-)SQLMACRO"
-        R"SQLMACRO(
                             THEN format('There is an ATTRIBUTE filter of that name -- did you mean '
                                         '[{}*="..."]? A semantic class selects by node kind; an '
                                         'attribute filters by value.',
@@ -4367,6 +4387,9 @@ CREATE OR REPLACE MACRO ast_select_from(
                            THEN 'function'
                        WHEN pseudo_arg = 'class'
                             OR (pseudo_arg_class IS NOT NULL
+
+)SQLMACRO"
+        R"SQLMACRO(
                                 AND is_semantic_type(semantic_type_code('DEFINITION_CLASS'), UPPER(pseudo_arg_class)))
                            THEN 'class'
                        WHEN pseudo_arg = 'module'
@@ -4387,9 +4410,6 @@ CREATE OR REPLACE MACRO ast_select_from(
         -- by name. Reachable only where scope.class IS NULL, so no language with
         -- real scope providers changes behaviour.
         --
-
-)SQLMACRO"
-        R"SQLMACRO(
         -- For those nodes, find the NEAREST enclosing class definition, matching
         -- the struct path: a node inside a class nested in another class is in
         -- scope of the INNER one only. In DFS order the containing class with the
@@ -4622,6 +4642,9 @@ CREATE OR REPLACE MACRO ast_select_from(
             END AS ok
         ),
 
+
+)SQLMACRO"
+        R"SQLMACRO(
         -- Precompute selector properties as scalars.
         -- validations_ok folds ALL "can't answer" guards (#89) into the one-row
         -- CTE that every matched_base branch cross-joins. This is deliberate:
@@ -4640,9 +4663,6 @@ CREATE OR REPLACE MACRO ast_select_from(
                 (SELECT class_filter FROM simple_class) as class_filter,
                 (SELECT left_type FROM combinator_parts) as left_type,
                 (SELECT left_type || '_%' FROM combinator_parts) as left_type_like,
-
-)SQLMACRO"
-        R"SQLMACRO(
                 (SELECT right_type FROM combinator_parts) as right_type,
                 (SELECT right_type || '_%' FROM combinator_parts) as right_type_like,
                 (SELECT left_class FROM combinator_parts) as left_class,
@@ -4885,6 +4905,9 @@ CREATE OR REPLACE MACRO ast_select_from(
                 AND NOT is_constituent(a.flags)
 
             -- Native extraction: modifiers array
+
+)SQLMACRO"
+        R"SQLMACRO(
             WHEN ac.attr_name = 'modifier' THEN
                 CASE ac.attr_op WHEN '*=' THEN list_contains(a.modifiers, ac.attr_value)
                                 ELSE list_contains(a.modifiers, ac.attr_value) END
@@ -4903,9 +4926,6 @@ CREATE OR REPLACE MACRO ast_select_from(
             -- [qualified=F[main]] stay human-writable.
             WHEN ac.attr_name = 'qualified' THEN
                 CASE ac.attr_op
-
-)SQLMACRO"
-        R"SQLMACRO(
                     WHEN '*=' THEN ast_qualified_name_as_string(a.qualified_name) LIKE '%' || ac.attr_value_esc || '%' ESCAPE '\'
                     WHEN '^=' THEN ast_qualified_name_as_string(a.qualified_name) LIKE ac.attr_value_esc || '%' ESCAPE '\'
                     WHEN '$=' THEN ast_qualified_name_as_string(a.qualified_name) LIKE '%' || ac.attr_value_esc ESCAPE '\'
@@ -5098,6 +5118,9 @@ CREATE OR REPLACE MACRO ast_select_from(
                     (pc.pseudo_arg IS NULL AND pc.pseudo_arg_class IS NULL)
                     OR (( pc.pseudo_arg = 'function'
                           OR (pc.pseudo_arg_class IS NOT NULL
+
+)SQLMACRO"
+        R"SQLMACRO(
                               AND is_semantic_type(semantic_type_code('DEFINITION_FUNCTION'), UPPER(pc.pseudo_arg_class))))
                         AND is_semantic_type(a.semantic_type, 'FN'))
                     OR (( pc.pseudo_arg = 'class'
@@ -5115,9 +5138,6 @@ CREATE OR REPLACE MACRO ast_select_from(
                 )
                 AND (pc.pseudo_arg_name IS NULL OR a.name = pc.pseudo_arg_name)
 
-
-)SQLMACRO"
-        R"SQLMACRO(
             -- :in-scope — the node is CONTAINED WITHIN a scope (complement of
             -- :is-scope). function/class/module (and aliases) use the precomputed
             -- scope.* struct with an optional #name; a bare tree-sitter type walks
@@ -5261,7 +5281,11 @@ CREATE OR REPLACE MACRO ast_select_from(
           )
     )
 
-    -- Route to correct output based on pseudo-element (or return matched as-is)
+    -- Route to correct output based on pseudo-element (or return matched as-is).
+    -- The outer projection restores the source's own type and name (see `ast`).
+    SELECT * EXCLUDE (__src_type, __src_name)
+             REPLACE (__src_type AS type, __src_name AS name)
+    FROM (
     SELECT * FROM matched
     WHERE (SELECT element_name FROM pseudo_element) IS NULL
     UNION ALL
@@ -5288,6 +5312,7 @@ CREATE OR REPLACE MACRO ast_select_from(
     UNION ALL
     SELECT * FROM pe_call_sites
     WHERE (SELECT element_name FROM pseudo_element) = 'call-sites'
+    )
     ORDER BY file_path, node_id;
 
 

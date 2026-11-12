@@ -179,8 +179,28 @@ CREATE OR REPLACE MACRO ast_select_from(
         -- column (read_ast(..., peek := 'full')); against a table parsed with
         -- peek := 'none' it raises an error with a re-parse hint. The ast_select
         -- wrapper materializes peek automatically when the selector needs it.
+        --
+        -- HTML elements match by tag and id, as in CSS: `section#week` selects
+        -- <section id="week">. Inside this macro only, an HTML element's `type`
+        -- is its tag (read_ast names an element by its tag) and its `name` is its
+        -- id attribute (from `parameters`; NULL when it has none). Every matching
+        -- path -- simple, combinator, :has(), :not() -- then sees CSS semantics
+        -- with no HTML case of its own. The source's own type and name ride along
+        -- as __src_type/__src_name and are put back on the rows returned, so
+        -- output columns keep read_ast's values (type = 'element').
         ast AS (
-            SELECT * FROM query_table(source)
+            SELECT * REPLACE (
+                       CASE WHEN language = 'html'
+                                 AND type IN ('element', 'script_element', 'style_element')
+                                 AND name IS NOT NULL AND name != ''
+                            THEN name ELSE type END AS type,
+                       CASE WHEN language = 'html'
+                                 AND type IN ('element', 'script_element', 'style_element')
+                            THEN list_filter(parameters, lambda p: p.name = 'id')[1].type
+                            ELSE name END AS name),
+                   type AS __src_type,
+                   name AS __src_name
+            FROM query_table(source)
         ),
 
         -- Find the top-level selector node (skip stylesheet, ERROR, and pseudo_element wrappers)
@@ -2348,7 +2368,11 @@ CREATE OR REPLACE MACRO ast_select_from(
           )
     )
 
-    -- Route to correct output based on pseudo-element (or return matched as-is)
+    -- Route to correct output based on pseudo-element (or return matched as-is).
+    -- The outer projection restores the source's own type and name (see `ast`).
+    SELECT * EXCLUDE (__src_type, __src_name)
+             REPLACE (__src_type AS type, __src_name AS name)
+    FROM (
     SELECT * FROM matched
     WHERE (SELECT element_name FROM pseudo_element) IS NULL
     UNION ALL
@@ -2375,6 +2399,7 @@ CREATE OR REPLACE MACRO ast_select_from(
     UNION ALL
     SELECT * FROM pe_call_sites
     WHERE (SELECT element_name FROM pseudo_element) = 'call-sites'
+    )
     ORDER BY file_path, node_id;
 
 
