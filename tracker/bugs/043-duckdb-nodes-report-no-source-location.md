@@ -4,6 +4,27 @@
 started.** Scoped to v1.18.0 under `042`. Found by the 25-language fan-out
 (2026-10-31), confirmed and sized by the scheduled continuation (2026-11-01).
 
+**2026-11-11 — THIS BUG GOT MORE SERIOUS, and the citation below was wrong.**
+`tracker/bugs/061` (the duckdb adapter's empty `file_path`) is now fixed. That
+empty path had been shielding this defect: `ast_source_of` could not reach the
+line numbers because its file join failed first. With a real path the join
+succeeds, and a numbered slice of lines 1..1 is the top of the file. Measured
+before a guard was added: `ast_source_of(..., 'customers', language := 'duckdb')`
+returned the file's comment header as the definition, with no error.
+`src/sql_macros/file_utilities.sql` now has a last `__sof_guard` branch that
+raises and names this entry; **delete that branch when this bug lands.**
+`ast_patch` has the same exposure and CANNOT be guarded from its input, because
+an edit set carries no language and a line-1 edit is a legitimate insertion.
+
+**The citation in "The defect" below names a file that does not exist.**
+`src/language_adapters/duckdb_adapter.cpp` is gone; `ls` returns
+"No such file or directory", and the only thing left in that directory is
+`duckdb_adapter_backup.cpp`, which is not referenced by CMake and does not
+contain these lines. The live site is `DuckDBAdapter::CreateASTNode` in
+`languages/duckdb/duckdb_adapter.cpp` (lines 1067-1070 on
+`fix/061-duckdb-adapter-file-path`; cite the FUNCTION, because the line numbers
+moved once already).
+
 ## The defect
 
 `DuckDBAdapter::CreateASTNode` hardcodes all four location fields
