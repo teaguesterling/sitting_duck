@@ -1,0 +1,96 @@
+# name: test/sql/duck_blocks_positions.test
+# description: ast_to_blocks puts each definition's file line range on its
+#   blocks, and a code block's body is the whole source lines, so a reader can
+#   cite file:line and the first line keeps its indent (duckeye#14).
+#   The contract, agreed with duckeye 2026-11-11:
+#     attributes['start_line'] / ['end_line']: plain decimal digits, 1-based,
+#     inclusive. Heading: the definition's extent. Code block: start_line is
+#     the first line, end_line is counted from the content. A block with no
+#     source position carries neither key.
+# group: [sql]
+
+require sitting_duck
+
+# Fixture: test/data/python/macros/blocks_demo.py
+#   1  CONST = 1
+#   3  class Shape:            (3-9)
+#   4      def area(self):     (4-5)
+#   7      class Inner:        (7-9)
+#   8          def deep(self): (8-9)
+#  11  def top(x: int, y: int) -> int:  (11-12)
+
+# A heading carries its definition's extent.
+query TTT
+SELECT block.content, block.attributes['start_line'], block.attributes['end_line']
+FROM ast_to_blocks('test/data/python/macros/blocks_demo.py')
+WHERE block.element_type = 'heading' ORDER BY element_order;
+----
+CONST: int	1	1
+Shape	3	9
+area(self)	4	5
+Inner	7	9
+deep(self)	8	9
+top(x: int, y: int) -> int	11	12
+
+# A code block is the whole source lines, so a nested method keeps the indent
+# of its first line, and it carries the lines it holds.
+query TTT
+SELECT replace(block.content, chr(10), '|'), block.attributes['start_line'], block.attributes['end_line']
+FROM ast_to_blocks('test/data/python/macros/blocks_demo.py')
+WHERE block.element_type = 'code' ORDER BY element_order;
+----
+CONST = 1	1	1
+    def area(self):|        return 0	4	5
+        def deep(self):|            return 1	8	9
+def top(x: int, y: int) -> int:|    return x + y	11	12
+
+# The metadata block has no source position, so it carries neither key.
+query II
+SELECT count(*) FILTER (WHERE map_contains(block.attributes, 'start_line')),
+       count(*) FILTER (WHERE map_contains(block.attributes, 'end_line'))
+FROM ast_to_blocks('test/data/python/macros/blocks_demo.py')
+WHERE block.element_type = 'metadata';
+----
+0	0
+
+# Every value is plain decimal digits: no sign, padding, separator or blank.
+# DuckDB's ::INTEGER cast is lenient ('4_2' -> 42), so a reader cannot rely on
+# the cast to reject a malformed value.
+query I
+SELECT count(*)
+FROM ast_to_blocks('test/data/python/macros/blocks_demo.py'),
+     (SELECT unnest(['start_line', 'end_line']) AS k) keys
+WHERE map_contains(block.attributes, k)
+  AND NOT regexp_full_match(block.attributes[k], '[1-9][0-9]*');
+----
+0
+
+# Summary and flat styles carry the pair on headings too.
+query TT
+SELECT block.attributes['start_line'], block.attributes['end_line']
+FROM ast_to_blocks('test/data/python/macros/blocks_demo.py', style := 'summary')
+WHERE block.element_type = 'heading' AND block.content = 'Inner';
+----
+7	9
+
+# ast_to_blocks_list carries the same keys.
+query TT
+SELECT b.attributes['start_line'], b.attributes['end_line']
+FROM (SELECT unnest(blocks) AS b FROM ast_to_blocks_list('test/data/python/macros/blocks_demo.py'))
+WHERE b.element_type = 'code' AND b.content LIKE '%def area%';
+----
+4	5
+
+# A table that holds only the selected definitions has no file text (no root
+# row): the line numbers are still right, and the body falls back to peek,
+# which begins at the definition's column.
+statement ok
+CREATE TABLE only_defs AS
+SELECT * FROM read_ast('test/data/python/macros/blocks_demo.py', peek := 'full')
+WHERE type = 'function_definition' AND name = 'area';
+
+query TTT
+SELECT replace(block.content, chr(10), '|'), block.attributes['start_line'], block.attributes['end_line']
+FROM ast_to_blocks_from('only_defs') WHERE block.element_type = 'code';
+----
+def area(self):|        return 0	4	5
