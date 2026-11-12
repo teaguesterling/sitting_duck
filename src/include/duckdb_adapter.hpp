@@ -40,8 +40,14 @@ public:
 	bool IsPublicNode(TSNode node, const string &content) const override;
 	ParsingFunction GetParsingFunction() const override;
 
-	// DuckDB-specific parsing function
-	ASTResult ParseSQL(const string &sql_content) const;
+	// DuckDB-specific parsing function.
+	//
+	// file_path is REQUIRED and has no default on purpose (tracker/bugs/061).
+	// Three call sites used to accept a file_path and drop it here, so every
+	// duckdb parse reported an empty path and ast_source_of could not locate a
+	// definition's file. A defaulted parameter is how a fourth call site would
+	// reintroduce that silently; without one, the compiler refuses it.
+	ASTResult ParseSQL(const string &sql_content, const string &file_path) const;
 
 	// Phase 2: Make GetNodeConfigs public for template access
 	const unordered_map<string, NodeConfig> &GetNodeConfigs() const override;

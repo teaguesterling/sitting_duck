@@ -72,7 +72,7 @@ ASTResult LanguageAdapterRegistry::ParseContentTemplated(const string &content, 
 #define SD_BUILTIN_LANGUAGE_NATIVE(name, ADAPTER_CLASS)                                                                \
 	if (normalized_language == #name) {                                                                                \
 		ADAPTER_CLASS adapter; /* Fresh instance - no static state persistence */                                      \
-		return adapter.ParseSQL(content);                                                                              \
+		return adapter.ParseSQL(content, file_path);                                                                   \
 	}
 #include "sitting_duck_builtin_languages.def"
 #undef SD_BUILTIN_LANGUAGE_TS
@@ -105,7 +105,7 @@ ASTResult LanguageAdapterRegistry::ParseContentTemplated(const string &content, 
 #define SD_BUILTIN_LANGUAGE_NATIVE(name, ADAPTER_CLASS)                                                                \
 	if (normalized_language == #name) {                                                                                \
 		ADAPTER_CLASS adapter; /* Fresh instance - no static state persistence */                                      \
-		return adapter.ParseSQL(content);                                                                              \
+		return adapter.ParseSQL(content, file_path);                                                                   \
 	}
 #include "sitting_duck_builtin_languages.def"
 #undef SD_BUILTIN_LANGUAGE_TS

@@ -92,8 +92,10 @@ CREATE OR REPLACE MACRO ast_get_source_numbered(file_path, start_line, end_line)
 -- the source, not an empty search. It names the count, one example path and the
 -- remedy, as ast_unparse_exact_from does (ast_unparse.sql:736-741). A table with
 -- no matches at all still returns 0 rows. A NULL or empty file_path in the node
--- table raises with its own message (the empty one names tracker/bugs/061, the
--- duckdb adapter's empty file_path), never the generic remedy.
+-- table raises with its own message (the empty one names tracker/bugs/061,
+-- which WAS the duckdb adapter's empty file_path and is now fixed), never the
+-- generic remedy. A duckdb parse has a real path and unusable LINES instead,
+-- which the last branch catches and names tracker/bugs/043.
 -- The guard is a join in the final SELECT, so a consumer that statically asks
 -- for no rows (LIMIT 0, WHERE false) prunes it and sees 0 rows; ast_unparse_exact
 -- behaves the same way for LIMIT 0. A `files` that covers only SOME of the
@@ -139,6 +141,7 @@ CREATE OR REPLACE MACRO ast_source_of_from(
                     ELSE 'other'
                 END AS definition_kind,
                 type,
+                language,
                 start_line,
                 end_line
             FROM query_table(ast_table)
@@ -176,9 +179,10 @@ CREATE OR REPLACE MACRO ast_source_of_from(
         -- has to come first and has to count ROWS: count(DISTINCT file_path)
         -- ignores NULL, and error() given a NULL message returns NULL instead of
         -- raising, so a guard that built its message from a NULL file_path would
-        -- fail open into 0 rows. The empty branch names the real cause (the
-        -- duckdb adapter always writes an empty file_path, tracker/bugs/061)
-        -- because the generic remedy would tell the caller to do what they did. The
+        -- fail open into 0 rows. The empty branch keeps its own message because
+        -- the generic remedy would tell the caller to do what they already did.
+        -- It used to name the duckdb adapter as the cause; tracker/bugs/061 is
+        -- now fixed, so the branch is reachable only for a hand-built table. The
         -- '<inline>' branch (parse_ast output) follows ast_unparse.sql:729-735.
         __sof_guard AS (
             SELECT
@@ -192,9 +196,10 @@ CREATE OR REPLACE MACRO ast_source_of_from(
                         THEN error('ast_source_of_from: ' ||
                                    (count(*) FILTER (WHERE m.file_path = ''))::VARCHAR ||
                                    ' matched row(s) have an empty file_path, so their source ' ||
-                                   'cannot be located. The duckdb adapter always produces an ' ||
-                                   'empty file_path (tracker/bugs/061); parse a tree-sitter ' ||
-                                   'language, or read the source yourself.')
+                                   'cannot be located. The duckdb adapter used to write one ' ||
+                                   '(tracker/bugs/061, fixed: it now reports the real path). ' ||
+                                   'A table built another way must carry a file_path, or you ' ||
+                                   'must read the source yourself.')
                     WHEN count(*) FILTER (WHERE m.file_path = '<inline>') > 0
                         THEN error('ast_source_of_from: the node table is in-memory ' ||
                                    'parse_ast() output (file_path = ''<inline>''), which has ' ||
@@ -210,6 +215,30 @@ CREATE OR REPLACE MACRO ast_source_of_from(
                                    ' matched file(s) have no content row in read_text(files) (e.g. ''' ||
                                    (min(m.file_path) FILTER (WHERE fc.file_path IS NULL)) ||
                                    '''); pass the same path or glob used for read_ast.')
+                    -- A USABLE PATH IS NOT A USABLE LOCATION. The duckdb
+                    -- adapter reports start_line = end_line = 1 for EVERY node
+                    -- (tracker/bugs/043), so a numbered slice of those lines is
+                    -- the top of the file and not the definition. Until 061 was
+                    -- fixed this branch was unreachable: the adapter wrote an
+                    -- empty file_path and the branch above caught it first, so
+                    -- 043 was shielded by 061 rather than handled. With a real
+                    -- path the join now succeeds and the wrong lines would be
+                    -- returned as if correct, which is worse than the silent 0
+                    -- that tracker/features/044-v2-m1-contract.md:16 forbids.
+                    -- Keyed on the language because the node row carries no
+                    -- "this adapter has no line information" column, and
+                    -- start_line = end_line = 1 is legitimate for a real
+                    -- one-line definition. DELETE THIS BRANCH WHEN 043 LANDS.
+                    -- Placed last so the caller-fixable causes are named first.
+                    WHEN count(*) FILTER (WHERE m.language = 'duckdb') > 0
+                        THEN error('ast_source_of_from: ' ||
+                                   (count(*) FILTER (WHERE m.language = 'duckdb'))::VARCHAR ||
+                                   ' matched row(s) were parsed by the duckdb adapter, ' ||
+                                   'which reports start_line = end_line = 1 for every ' ||
+                                   'node (tracker/bugs/043). The file can be read, but ' ||
+                                   'the definition cannot be located inside it, so any ' ||
+                                   'source returned would be the wrong lines. Parse with ' ||
+                                   'a tree-sitter language.')
                     ELSE true
                 END AS ok
             FROM matches m

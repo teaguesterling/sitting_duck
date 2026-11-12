@@ -64,8 +64,8 @@
 #                                          tracker/bugs/060
 #   section 7    ast_containing_line 20   and  ast_in_range 20
 #                                          tracker/bugs/043
-#   section 7    the blank_paths / source_of_rows row (MOVED: now a statement error)
-#                                          tracker/bugs/061
+#   section 7    degenerate_lines 20, and the ast_source_of statement error
+#                                          tracker/bugs/043
 #   section 9    the duckdb unparse text row
 #                                          tracker/bugs/059
 #
@@ -731,44 +731,45 @@ ast_precedes	1
 # above the call.
 #
 # This is the ninth path-taking twin and the one that cannot return rows through
-# `duckdb`, for a reason that belongs to the ADAPTER and not to the macro:
-# MEASURED, all 20 nodes of a duckdb parse carry an EMPTY file_path. The macro
-# joins read_text(files).filename against that file_path on a normalised key, and
-# an empty path never joins, so the `__sof_guard` CTE raises. (Before 058's fix
-# this was a silent 0 rows from an exact-equality join.)
+# `duckdb`, for a reason that belongs to the ADAPTER and not to the macro. The
+# reason has CHANGED, and the history is the point of this block.
 #
-# OWNED BY tracker/bugs/061, AND NOT BY 058. An earlier version of this comment
-# called it "a second instance of 058", which is wrong in the way that matters:
-# 058 is scoped to a path-SPELLING disagreement and its prescribed fix is a
-# normalising join, and an empty string normalises to an empty string and still
-# joins to nothing. Someone who fixes 058 and closes it would leave this door
-# open. 043 does not cover it either -- measured, `grep -n file_path` over 043
-# returns nothing -- so it needed an id of its own.
+# UNTIL tracker/bugs/061 WAS FIXED: all 20 nodes carried an EMPTY file_path, the
+# normalised join found no content row, and the `__sof_guard` CTE raised on the
+# empty-path branch. (Before 058's fix it was a silent 0 rows instead.)
 #
-# THIS ROW WAS A KNOWN-DEFECT PIN and has MOVED: the 058 raise landed in the
-# shared body, and 061's own post-fix expectation named exactly this outcome --
-# "a `statement error` naming the unlocatable file, if 061 lands as the loud
-# guard". Before it, the call returned 0 rows with source_of_rows = 0. Now the
-# three control columns are unchanged and the call RAISES. This is a change in
-# what the PRE-EXISTING twin does for a duckdb parse (0 rows -> error), reached
-# through delegation; the 058 notes had measured the guard a no-op for the twin
-# over four path SPELLINGS of a tree-sitter language only, not for this adapter.
+# NOW 061 IS FIXED: the adapter reports the real path, so blank_paths is 0 and
+# the join SUCCEEDS. That removed the only thing standing between a caller and
+# tracker/bugs/043, which is the defect that every duckdb node reports
+# start_line = end_line = 1. MEASURED on this fixture: degenerate_lines = 20 and
+# count(DISTINCT start_line) = 1, while `customers` is defined on line 15. A
+# numbered slice of lines 1..1 is the file's comment header, so the macro would
+# have returned the WRONG TEXT as if it were right -- worse than the silent 0
+# that tracker/features/044-v2-m1-contract.md:16 forbids. 061's fix was measured
+# to do exactly that before the guard below existed.
+#
+# So the guard gained a last branch, keyed on the language, and the call still
+# RAISES -- naming 043 now rather than 061. 061 was shielding 043 by accident.
+# The branch is to be DELETED when 043 lands, and then this assertion becomes a
+# row count rather than an error.
 #
 # Three controls, so the error cannot come from a broken query: the definition
 # the macro is looking for IS there (control_defs = 1, the `customers` table),
-# the flag filter the macro applies DOES pass (construct_flagged = 20), and the
-# cause is named (blank_paths = 20).
-query III
+# the flag filter the macro applies DOES pass (construct_flagged = 20), and
+# blank_paths = 0 proves the path is no longer the cause. degenerate_lines = 20
+# names the cause that is left.
+query IIII
 SELECT (SELECT count(*) FROM ast_definitions('test/data/sql/example.sql', language := 'duckdb')) AS control_defs,
        (SELECT count(*) FILTER (is_construct(flags)) FROM read_ast('test/data/sql/example.sql','duckdb')) AS construct_flagged,
-       (SELECT count(*) FILTER (file_path = '' OR file_path IS NULL) FROM read_ast('test/data/sql/example.sql','duckdb')) AS blank_paths;
+       (SELECT count(*) FILTER (file_path = '' OR file_path IS NULL) FROM read_ast('test/data/sql/example.sql','duckdb')) AS blank_paths,
+       (SELECT count(*) FILTER (start_line = 1 AND end_line = 1) FROM read_ast('test/data/sql/example.sql','duckdb')) AS degenerate_lines;
 ----
-1	20	20
+1	20	0	20
 
 statement error
 SELECT count(*) FROM ast_source_of('test/data/sql/example.sql','customers', language := 'duckdb');
 ----
-tracker/bugs/061
+tracker/bugs/043
 
 # =============================================================================
 # 8. parse_ast_list_table.sql -- the one macro in its file (68 of 69)

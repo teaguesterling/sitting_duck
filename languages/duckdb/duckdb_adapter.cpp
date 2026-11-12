@@ -302,12 +302,26 @@ const unordered_map<string, NodeConfig> &DuckDBAdapter::GetNodeConfigs() const {
 //==============================================================================
 // Core Parsing Function (Architecture Plan Section 3.2)
 //==============================================================================
-ASTResult DuckDBAdapter::ParseSQL(const string &sql_content) const {
+ASTResult DuckDBAdapter::ParseSQL(const string &sql_content, const string &file_path) const {
+	// THE one writer of source.file_path on the native path (tracker/bugs/061).
+	// Every caller reaches the adapter through this function, so stamping the
+	// path here covers the parse result and every CreateErrorResult below it --
+	// an error row used to carry no path either, which left a caller under
+	// ignore_errors unable to tell which file failed.
+	//
+	// The caller supplies the value and this function does not invent one:
+	// read_ast passes the real path (src/ast_parsing_task.cpp), and parse_ast
+	// passes the "<inline>" sentinel (src/parse_ast_function.cpp:85), which is
+	// what every tree-sitter language already reports for a string input.
 	try {
 		// Use global parser manager with proper lifecycle
-		return g_parser_manager.ParseSQL(sql_content, this);
+		ASTResult result = g_parser_manager.ParseSQL(sql_content, this);
+		result.source.file_path = file_path;
+		return result;
 	} catch (const Exception &e) {
-		return CreateErrorResult("Internal error: " + string(e.what()));
+		ASTResult result = CreateErrorResult("Internal error: " + string(e.what()));
+		result.source.file_path = file_path;
+		return result;
 	}
 }
 
@@ -321,7 +335,8 @@ ASTResult DuckDBAdapter::ConvertStatementsToAST(const vector<unique_ptr<SQLState
 	}
 
 	ASTResult result;
-	result.source.file_path = "";
+	// source.file_path is owned by ParseSQL, which is the only way in and is the
+	// only place the path is known. Writing "" here was tracker/bugs/061.
 	result.source.language = "duckdb";
 	result.parse_time = std::chrono::system_clock::now();
 
@@ -1240,7 +1255,7 @@ ParsingFunction DuckDBAdapter::GetParsingFunction() const {
 	return [](const void *adapter, const string &content, const string &language, const string &file_path,
 	          int32_t peek_size, const string &peek_mode) -> ASTResult {
 		auto typed_adapter = static_cast<const DuckDBAdapter *>(adapter);
-		return typed_adapter->ParseSQL(content);
+		return typed_adapter->ParseSQL(content, file_path);
 	};
 }
 
