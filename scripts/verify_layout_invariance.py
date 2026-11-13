@@ -161,8 +161,15 @@ def module_parsers(spec, root=ROOT):
         kind, body = m.group(3), m.group(4)
         parsers = []
         if "PARSERS" in body:
-            tail = body.split("PARSERS", 1)[1]
-            parsers = [tok for tok in tail.split() if not tok.isupper()]
+            # Stop at the next cmake keyword rather than filtering uppercase
+            # tokens out wherever they fall: ADAPTER happens to precede PARSERS
+            # in every module today, and a gate that silently reads an adapter
+            # .cpp as a parser source if that order ever changes is worse than
+            # no gate.
+            for tok in body.split("PARSERS", 1)[1].split():
+                if tok.isupper() and tok.isalpha():
+                    break
+                parsers.append(tok)
         out[language] = (kind, parsers)
     return out
 

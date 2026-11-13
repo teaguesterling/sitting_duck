@@ -419,6 +419,14 @@ jobs:
         # language as a membership change, and path templates resolving to
         # nothing must trip both the per-language check and the kit-denominator
         # floor -- that last one is the exact shape the M2 move would hit.
+        #
+        # Since #329: a module's PARSERS path that leaves generated_parsers/
+        # must be reported (that PR shipped `../grammars/...` and only the
+        # submodule-free build job noticed, after the merge), a path inside the
+        # tree that resolves to nothing must be reported, a pregenerated tree
+        # holding no parsers must report "measured nothing" rather than pass
+        # empty, and a parser manifest that is missing or omits a language must
+        # be reported -- the audits skip what the manifest does not name.
         run: python3 scripts/verify_layout_invariance.py --self-test
       - name: Verify the tree agrees with spec/layout/layout.yaml
         run: python3 scripts/verify_layout_invariance.py
