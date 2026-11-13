@@ -83,7 +83,7 @@ INSERT INTO __builtin_expected VALUES
     ('bash'), ('c'), ('cpp'), ('csharp'), ('css'), ('dart'), ('duckdb'), ('go'),
     ('graphql'), ('hcl'), ('html'), ('java'), ('javascript'), ('json'),
     ('kotlin'), ('lua'), ('markdown'), ('php'), ('python'), ('r'), ('ruby'),
-    ('rust'), ('sql'), ('swift'), ('toml'), ('typescript'), ('yaml'), ('zig');
+    ('rust'), ('sql'), ('swift'), ('toml'), ('tsx'), ('typescript'), ('yaml'), ('zig');
 
 # GUARD, and the reason the next two assertions are not vacuous: a typo that
 # emptied the pinned table would make "nothing disappeared" trivially true.
@@ -92,7 +92,7 @@ INSERT INTO __builtin_expected VALUES
 query I
 SELECT count(*) FROM __builtin_expected;
 ----
-28
+29
 
 # THE assertion that replaces the hardcoded total. Exact set, both directions:
 # a dropped or renamed built-in fails it, an unexpected built-in fails it, and a
@@ -127,6 +127,7 @@ rust
 sql
 swift
 toml
+tsx
 typescript
 yaml
 zig
@@ -208,14 +209,14 @@ SELECT count(*) FROM (DESCRIBE __tm) WHERE column_name LIKE '%native%';
 # anywhere the runtime can see.
 # =============================================================================
 
-# Of the 28 built-ins, 27 contribute declaration rows. Counted over the pinned
+# Of the 29 built-ins, 28 contribute declaration rows. Counted over the pinned
 # set rather than over ast_supported_languages(), so a runtime registration --
 # which contributes rows iff it was given a config -- cannot move it.
 query I
 SELECT count(DISTINCT language) FROM ast_type_map()
 WHERE language IN (SELECT language FROM __builtin_expected);
 ----
-27
+28
 
 query I
 SELECT count(*) FROM ast_type_map('duckdb');
@@ -316,11 +317,11 @@ SELECT name_strategy, count(DISTINCT language) FROM ast_type_map()
 WHERE language IN (SELECT language FROM __builtin_expected)
 GROUP BY 1 ORDER BY 1;
 ----
-custom	20
-find_assignment_target	13
-find_call_target	18
-find_identifier	21
+custom	21
+find_assignment_target	14
+find_call_target	19
+find_identifier	22
 find_in_declarator	3
 find_property	4
-node_text	27
-none	27
+node_text	28
+none	28

@@ -92,6 +92,7 @@ struct NativeExtractionTraits {
 class PythonAdapter;
 class JavaScriptAdapter;
 class TypeScriptAdapter;
+class TSXAdapter;
 class JavaAdapter;
 class CPPAdapter;
 class RustAdapter;
@@ -394,6 +395,18 @@ struct NativeExtractionTraits<TypeScriptAdapter> {
 	template <NativeExtractionStrategy Strategy>
 	using ExtractorType = TypeScriptNativeExtractor<Strategy>;
 };
+
+// TSX extracts exactly as TypeScript does.
+template <>
+struct NativeExtractionTraits<TSXAdapter> : NativeExtractionTraits<TypeScriptAdapter> {};
+template <>
+inline bool IsBareNameDefinitionParent<TSXAdapter>(const char *parent_type) {
+	return IsBareNameDefinitionParent<TypeScriptAdapter>(parent_type);
+}
+template <>
+inline bool IsBareNameDefinitionField<TSXAdapter>(TSNode self, TSNode parent, const char *parent_type) {
+	return IsBareNameDefinitionField<TypeScriptAdapter>(self, parent, parent_type);
+}
 
 template <>
 struct NativeExtractionTraits<JavaAdapter> {

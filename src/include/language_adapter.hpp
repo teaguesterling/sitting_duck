@@ -209,6 +209,18 @@ private:
 	static const unordered_map<string, NodeConfig> node_configs_anon;
 };
 
+// TSX: TypeScript with JSX, parsed with tree-sitter-typescript's tsx grammar.
+// The typescript grammar has no JSX, so a .tsx file read with it is mostly ERROR nodes.
+class TSXAdapter : public TypeScriptAdapter {
+public:
+	string GetLanguageName() const override;
+	vector<string> GetAliases() const override;
+
+protected:
+	void InitializeParser() const override;
+	unique_ptr<TSParserWrapper> CreateFreshParser() const override;
+};
+
 // SQL language adapter
 class SQLAdapter : public LanguageAdapter {
 public:

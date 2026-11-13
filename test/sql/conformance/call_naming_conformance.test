@@ -95,6 +95,7 @@ ruby	3	3
 rust	2	2
 sql	4	4
 swift	2	2
+tsx	4	2
 typescript	4	2
 zig	2	2
 
@@ -371,6 +372,8 @@ cpp	delete
 cpp	new
 hcl	template_interpolation
 javascript	new
+tsx	instantiation_expression
+tsx	new
 typescript	instantiation_expression
 typescript	new
 

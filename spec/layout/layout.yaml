@@ -84,6 +84,7 @@ registration_order:
   - zig
   - dart
   - yaml
+  - tsx
 
 # THE SQL MACRO MANIFEST.
 #
@@ -131,6 +132,10 @@ exceptions:
   csharp:
     grammar: "c-sharp"  # grammars/tree-sitter-c-sharp, not -csharp
     reason: "upstream grammar repository name differs from the registered name"
+  tsx:
+    definitions: none   # TSXAdapter inherits TypeScriptAdapter's table
+    grammar: "typescript"  # tree-sitter-typescript ships the tsx grammar beside typescript
+    reason: "TypeScript with JSX: typescript's adapter and declarations, the tsx grammar"
 
 # Declaration tables that belong to no registered language. These are the
 # condition yaml was in before #227 wired it up: a .def with no adapter.

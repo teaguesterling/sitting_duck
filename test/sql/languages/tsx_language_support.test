@@ -1,0 +1,30 @@
+# name: test/sql/languages/tsx_language_support.test
+# description: .tsx parses with tree-sitter-typescript's tsx grammar, .ts with the typescript grammar
+# group: [languages]
+
+require sitting_duck
+
+query II
+SELECT detect_language('App.tsx'), detect_language('app.ts');
+----
+tsx	typescript
+
+# JSX is ERROR nodes to the typescript grammar and clean to the tsx grammar.
+query II
+SELECT count(node_id) FILTER (type = 'ERROR') > 0, (SELECT count(node_id) FROM parse_ast('const App = () => <div className="x">{n} more</div>;', 'tsx') WHERE type = 'ERROR')
+FROM parse_ast('const App = () => <div className="x">{n} more</div>;', 'typescript');
+----
+true	0
+
+# A type assertion is TypeScript, not JSX: .ts keeps the typescript grammar.
+query I
+SELECT count(node_id) FROM parse_ast('const n = <number>raw;', 'typescript') WHERE type = 'ERROR';
+----
+0
+
+# Definitions are named as in TypeScript.
+query I
+SELECT list(name ORDER BY name) FROM parse_ast('export function App() { return <Layout title="x" />; } interface Props { title: string }', 'tsx')
+WHERE is_definition(semantic_type) AND type IN ('function_declaration', 'interface_declaration');
+----
+[App, Props]
