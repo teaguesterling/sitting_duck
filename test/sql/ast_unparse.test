@@ -34,6 +34,40 @@ SELECT int_arg FROM ast_unparse_rules('python') WHERE language = 'python' AND ta
 ----
 2
 
+# tsx gets TypeScript's rules. TSXAdapter inherits everything the C++ side
+# dispatches through virtuals and traits, but src/unparse_rules.cpp keys its rule
+# table by the LANGUAGE STRING, which no inheritance reaches. Measured when tsx
+# landed: ast_unparse_rules('tsx') returned the universal set alone -- the same
+# answer an unknown language gets -- so a .tsx file unparsed without TypeScript's
+# indentation and blank-line rules.
+#
+# The control comes first on purpose: the EXCEPT below compares two sets, and
+# comparing two empty sets passes while measuring nothing.
+query I
+SELECT count(*) > 0 FROM ast_unparse_rules('tsx') WHERE language = 'tsx';
+----
+true
+
+query I
+SELECT
+  (SELECT count(*) FROM (
+     SELECT rule, target, int_arg, str_arg FROM ast_unparse_rules('tsx') WHERE language = 'tsx'
+     EXCEPT
+     SELECT rule, target, int_arg, str_arg FROM ast_unparse_rules('typescript') WHERE language = 'typescript'))
++ (SELECT count(*) FROM (
+     SELECT rule, target, int_arg, str_arg FROM ast_unparse_rules('typescript') WHERE language = 'typescript'
+     EXCEPT
+     SELECT rule, target, int_arg, str_arg FROM ast_unparse_rules('tsx') WHERE language = 'tsx'));
+----
+0
+
+# And tsx must not read as an unknown language, which is how the defect looked.
+query I
+SELECT (SELECT count(*) FROM ast_unparse_rules('tsx'))
+     > (SELECT count(*) FROM ast_unparse_rules('no-such-language'));
+----
+true
+
 # C rules include indent for 'compound_statement'
 query T
 SELECT rule FROM ast_unparse_rules('c') WHERE language = 'c' AND target = 'compound_statement';
