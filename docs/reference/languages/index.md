@@ -10,7 +10,7 @@ organized by programming language. Each page shows:
 
 !!! warning "4 pages here document languages that are not built in"
 
-    `read_ast` / `parse_ast` accept **28** languages. The
+    `read_ast` / `parse_ast` accept **29** languages. The
     authoritative list is `cmake/BuiltinLanguages.cmake`, which this page
     is generated from, so neither the count nor the list below can drift
     from the build. `SELECT language FROM ast_supported_languages()`
@@ -21,7 +21,7 @@ organized by programming language. Each page shows:
     page here, but no adapter is built, so they error with "Unsupported
     language". Those pages are design references.
 
-    Conversely, 2 **supported** languages have no page here: `duckdb`, `sql` (no `_types.def` to generate one from).
+    Conversely, 3 **supported** languages have no page here: `duckdb`, `sql`, `tsx` (no `_types.def` to generate one from).
 
 ## Languages
 

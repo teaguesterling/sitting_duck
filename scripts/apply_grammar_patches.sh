@@ -57,7 +57,9 @@ case "$GRAMMAR_NAME" in
     "tree-sitter-cpp")
         apply_patch "fix-cpp-grammar-require"
         ;;
-    "typescript")
+    "typescript"|"tsx")
+        # One patch for both dialects: it edits common/define-grammar.js, which
+        # typescript/grammar.js and tsx/grammar.js both require.
         apply_patch "fix-typescript-grammar-require"
         ;;
     "tree-sitter-rust")

@@ -118,6 +118,10 @@ if(NOT USING_PREGENERATED_PARSERS AND CARGO_EXECUTABLE)
                     if("${GRAMMAR_NAME}" STREQUAL "typescript")
                         file(GLOB GRAMMAR_PATCHES "${CMAKE_CURRENT_SOURCE_DIR}/patches/*typescript*.patch")
                         message(STATUS "TypeScript pattern found: ${GRAMMAR_PATCHES}")
+                    elseif("${GRAMMAR_NAME}" STREQUAL "tsx")
+                        # Same patch: it edits common/define-grammar.js, which both dialects include.
+                        file(GLOB GRAMMAR_PATCHES "${CMAKE_CURRENT_SOURCE_DIR}/patches/*typescript*.patch")
+                        message(STATUS "TSX pattern found: ${GRAMMAR_PATCHES}")
                     elseif("${GRAMMAR_NAME}" STREQUAL "tree-sitter-cpp") 
                         file(GLOB GRAMMAR_PATCHES "${CMAKE_CURRENT_SOURCE_DIR}/patches/*cpp*.patch")
                         message(STATUS "C++ pattern found: ${GRAMMAR_PATCHES}")
@@ -167,6 +171,8 @@ if(NOT USING_PREGENERATED_PARSERS AND CARGO_EXECUTABLE)
     # TypeScript builds on JavaScript
     generate_parser("tree-sitter-javascript" "tree-sitter-javascript/src/parser.c" "tree-sitter-javascript/src/scanner.c")
     generate_parser("tree-sitter-typescript/typescript" "tree-sitter-typescript/typescript/src/parser.c" "tree-sitter-typescript/typescript/src/scanner.c")
+    # tsx is the same grammar's second dialect; it shares common/define-grammar.js
+    generate_parser("tree-sitter-typescript/tsx" "tree-sitter-typescript/tsx/src/parser.c" "tree-sitter-typescript/tsx/src/scanner.c")
     # Independent grammars
     generate_parser("tree-sitter-python" "tree-sitter-python/src/parser.c" "tree-sitter-python/src/scanner.c")
     generate_parser("tree-sitter-sql" "tree-sitter-sql/src/parser.c" "tree-sitter-sql/src/scanner.c")
