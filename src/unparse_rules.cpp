@@ -48,6 +48,12 @@ static std::unordered_map<std::string, std::vector<UnparseRule>> InitLanguageRul
 #include "../languages/typescript/typescript_unparse.def"
 #undef DEF_UNPARSE_RULE
 		map["ts"] = rules;
+		// tsx is TypeScript's adapter with tree-sitter-typescript's tsx grammar, so it
+		// needs TypeScript's layout rules. This table is keyed by the language STRING,
+		// which TSXAdapter's trait and virtual delegation does not reach: without this
+		// line ast_unparse_rules('tsx') returns the universal set alone -- the same
+		// answer an unknown language gets. Copy before the move below.
+		map["tsx"] = rules;
 		map["typescript"] = std::move(rules);
 	}
 
@@ -330,7 +336,8 @@ static const std::vector<std::string> &GetCanonicalLanguages() {
 	static const std::vector<std::string> canonical_langs = {
 	    "bash",   "c",    "cpp",  "csharp",     "css",   "dart",  "fsharp", "go",         "graphql",  "haskell",
 	    "hcl",    "html", "java", "javascript", "json",  "julia", "kotlin", "lua",        "markdown", "php",
-	    "python", "r",    "ruby", "rust",       "scala", "swift", "toml",   "typescript", "yaml",     "zig"};
+	    "python", "r",    "ruby", "rust",       "scala", "swift", "toml",   "tsx",        "typescript",
+	    "yaml",   "zig"};
 	return canonical_langs;
 }
 
