@@ -28,3 +28,97 @@ SELECT list(name ORDER BY name) FROM parse_ast('export function App() { return <
 WHERE is_definition(semantic_type) AND type IN ('function_declaration', 'interface_declaration');
 ----
 [App, Props]
+
+# =============================================================================
+# tsx IS TypeScript, apart from the grammar
+# =============================================================================
+#
+# TSXAdapter derives from TypeScriptAdapter and swaps only the grammar, so on
+# source that holds no JSX the two languages must produce the same tree, the
+# same names and the same semantic types. This is the assertion that would
+# notice a future change to TypeScript's declarations, extraction or naming
+# that tsx silently does not inherit.
+#
+# `as`, not `<T>x`: `type_assertion` is the one named node type tsx does NOT
+# have, because `<` opens JSX there. The case above pins that difference.
+
+# Control FIRST: the comparison below is between two sets, and two empty sets
+# are equal. Without this line a binding failure would read as a pass.
+query I
+SELECT count(*) > 20 FROM parse_ast('export function f(raw: unknown): number { return (raw as number) ?? 0; } interface P { t: string }', 'tsx');
+----
+true
+
+query I
+SELECT (SELECT count(*) FROM (
+          SELECT * EXCLUDE (language) FROM parse_ast('export function f(raw: unknown): number { return (raw as number) ?? 0; } interface P { t: string }', 'tsx')
+          EXCEPT ALL
+          SELECT * EXCLUDE (language) FROM parse_ast('export function f(raw: unknown): number { return (raw as number) ?? 0; } interface P { t: string }', 'typescript')))
+     + (SELECT count(*) FROM (
+          SELECT * EXCLUDE (language) FROM parse_ast('export function f(raw: unknown): number { return (raw as number) ?? 0; } interface P { t: string }', 'typescript')
+          EXCEPT ALL
+          SELECT * EXCLUDE (language) FROM parse_ast('export function f(raw: unknown): number { return (raw as number) ?? 0; } interface P { t: string }', 'tsx')));
+----
+0
+
+# =============================================================================
+# read_ast over a directory holding both extensions
+# =============================================================================
+#
+# test/data/tsx/ carries component.tsx and plain.ts on purpose: a React tree is
+# mixed, and auto-detection has to answer per file rather than per call. Both
+# parse with zero ERROR nodes, which is the whole point of the language.
+
+query III
+SELECT language, count(*) > 0 AS has_nodes, count(*) FILTER (type = 'ERROR') AS errors
+FROM read_ast('test/data/tsx/*') GROUP BY 1 ORDER BY 1;
+----
+tsx	true	0
+typescript	true	0
+
+# The JSX in component.tsx is the part the typescript grammar cannot read, so
+# the file must carry jsx nodes and no errors.
+query II
+SELECT count(*) FILTER (type LIKE 'jsx_%') > 0 AS has_jsx, count(*) FILTER (type = 'ERROR') AS errors
+FROM read_ast('test/data/tsx/component.tsx');
+----
+true	0
+
+# AN EXPLICIT LANGUAGE FILTERS BY ITS OWN EXTENSIONS, and `typescript` owns only
+# `.ts` since tsx landed. So naming typescript over a .tsx path reads no file.
+# Pinned here so that changing it -- letting `typescript` accept `.tsx` again --
+# is a deliberate act with a failing test behind it, not a silent drift. Same
+# shape as test/sql/core/error_handling.test:14, a .py file read as javascript.
+statement error
+SELECT count(*) FROM read_ast('test/data/tsx/component.tsx', 'typescript');
+----
+IO Error
+
+# And with ignore_errors the same call is EMPTY rather than loud. A query that
+# sets it over a mixed tree loses every .tsx file without a word.
+query I
+SELECT count(*) FROM read_ast('test/data/tsx/component.tsx', 'typescript', ignore_errors := true);
+----
+0
+
+# A glob is not an error: the .ts file still answers, the .tsx file is skipped.
+query I
+SELECT count(DISTINCT language) FROM read_ast('test/data/tsx/*', 'typescript');
+----
+1
+
+# =============================================================================
+# The extension tables, which are hand-written twice
+# =============================================================================
+#
+# src/ast_file_utils.cpp holds EXTENSION_TO_LANGUAGE and LANGUAGE_TO_EXTENSIONS
+# as two separate literals. detect_language() reads the first; an explicit
+# language filters files through the second. #329 had to edit both by hand, and
+# a one-sided edit gives a language that detects but reads nothing, or reads but
+# never detects.
+query II
+SELECT language, extensions FROM ast_supported_languages()
+WHERE language IN ('tsx', 'typescript') ORDER BY language;
+----
+tsx	[tsx]
+typescript	[ts]

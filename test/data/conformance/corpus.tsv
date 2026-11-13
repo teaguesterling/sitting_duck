@@ -24,7 +24,7 @@
 # defect.
 #
 # WHY SO MANY FIXTURES PER LANGUAGE. The ../unparse_leaf_text/sample.* set
-# covers 26 of the 27 registered languages in one place, which makes it the
+# covers 26 of the 29 registered languages in one place, which makes it the
 # natural spine of this corpus -- but those files were written to exercise LEAF
 # TEXT, so several of them have only a no-argument function (`void main()`,
 # `auto greet() -> std::string`). A corpus like that cannot distinguish "this
@@ -45,6 +45,7 @@ cpp	../unparse_leaf_text/sample.cpp
 cpp	../cpp/simple.cpp
 typescript	../unparse_leaf_text/sample.ts
 typescript	../javascript/typed_example.ts
+tsx	../tsx/component.tsx
 sql	../unparse_leaf_text/sample.sql
 sql	../sql/create_function_example.sql
 # sql_calls.sql, not duckdb_macros.sql: the tree-sitter `sql` grammar cannot

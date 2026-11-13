@@ -99,3 +99,54 @@ query I
 SELECT detect_language('test.py') IN (SELECT language FROM ast_supported_languages());
 ----
 true
+
+# =============================================================================
+# THE EXTENSION TABLES ARE WRITTEN TWICE, so they are checked against each other
+# =============================================================================
+#
+# src/ast_file_utils.cpp holds two separate literals: EXTENSION_TO_LANGUAGE,
+# which detect_language() reads, and LANGUAGE_TO_EXTENSIONS, which an explicit
+# language argument filters candidate files through. Nothing kept them in step
+# until this test. A one-sided edit is silent in both directions:
+#
+#   * an extension added only to EXTENSION_TO_LANGUAGE detects correctly and
+#     then matches no file when the language is named;
+#   * an extension added only to LANGUAGE_TO_EXTENSIONS is accepted when the
+#     language is named and auto-detects as nothing.
+#
+# Adding tsx in #329 required editing both by hand, and moving `.tsx` off
+# typescript required editing both again.
+
+query I
+SELECT count(*) FROM (
+    SELECT language, unnest(extensions) AS ext FROM ast_supported_languages()
+) WHERE detect_language('somefile.' || ext) <> language;
+----
+0
+
+# Guard, and the reason the assertion above is not vacuous: an empty extension
+# list for every language would make "nothing disagrees" trivially true.
+query I
+SELECT count(*) > 50 FROM (SELECT unnest(extensions) FROM ast_supported_languages());
+----
+true
+
+# The other side of the pair. A language with no extensions cannot be reached by
+# an explicit language argument at all -- every candidate file is filtered out.
+# duckdb is the only one that is meant to be in that state: it parses SQL text
+# through DuckDB's own parser and owns no file extension.
+query I
+SELECT string_agg(language, ', ' ORDER BY language) FROM ast_supported_languages()
+WHERE len(extensions) = 0;
+----
+duckdb
+
+# PLANTED CONTROL for the assertion above, using the pairing that was real
+# before #329: typescript claiming `.tsx`. The comparison must report it. A
+# check that cannot be made to fail is indistinguishable from one that is not
+# looking, and this one reads two maps that agree today.
+query I
+SELECT count(*) FROM (VALUES ('typescript', 'tsx'), ('javascript', 'ts')) t(language, ext)
+WHERE detect_language('somefile.' || ext) <> language;
+----
+2
