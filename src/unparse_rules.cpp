@@ -334,10 +334,10 @@ std::vector<UnparseRule> GetLanguageUnparseRules(const std::string &language) {
 
 static const std::vector<std::string> &GetCanonicalLanguages() {
 	static const std::vector<std::string> canonical_langs = {
-	    "bash",   "c",    "cpp",  "csharp",     "css",   "dart",  "fsharp", "go",         "graphql",  "haskell",
-	    "hcl",    "html", "java", "javascript", "json",  "julia", "kotlin", "lua",        "markdown", "php",
-	    "python", "r",    "ruby", "rust",       "scala", "swift", "toml",   "tsx",        "typescript",
-	    "yaml",   "zig"};
+	    "bash",    "c",       "cpp",      "csharp", "css",        "dart",       "fsharp", "go",
+	    "graphql", "haskell", "hcl",      "html",   "java",       "javascript", "json",   "julia",
+	    "kotlin",  "lua",     "markdown", "php",    "python",     "r",          "ruby",   "rust",
+	    "scala",   "swift",   "toml",     "tsx",    "typescript", "yaml",       "zig"};
 	return canonical_langs;
 }
 
