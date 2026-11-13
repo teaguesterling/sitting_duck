@@ -38,6 +38,19 @@ paths:
   # index and a module is the artifact.
   module: "languages/{language}/module.cmake"
   declaration_table: "cmake/BuiltinLanguages.cmake"
+  # Where the build READS parser sources from. CMakeLists.txt sets
+  # PARSER_SOURCE_DIR to this directory whenever the canary
+  # tree-sitter-c/src/parser.c is present, which is every default build, and a
+  # module's PARSERS paths are resolved against it. Committed on purpose: the
+  # `Runtime grammar registration tests` CI job builds with only the duckdb,
+  # extension-ci-tools and third_party/tree-sitter submodules checked out, so a
+  # module whose PARSERS escape this directory breaks a build that has no
+  # grammar submodule at all.
+  pregenerated_parsers: "generated_parsers"
+  # The second register of the same fact. scripts/audit_*.py resolve a language
+  # to its parser through THIS file, not through module.cmake, so a language
+  # missing here is skipped by every audit -- green and empty, not failing.
+  parser_manifest: "generated_parsers/MANIFEST"
   # Emitted into the build tree by cmake/BuiltinLanguages.cmake. Checked only
   # when a build is present, so this gate still runs on a bare checkout.
   generated_table: "extension/sitting_duck/sitting_duck_generated/sitting_duck_builtin_languages.def"

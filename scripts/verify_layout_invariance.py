@@ -81,6 +81,10 @@ DECLARATION = re.compile(r"^\s*sitting_duck_language\(\s*([a-z0-9_]+)\s", re.M)
 GENERATED = re.compile(r"^SD_BUILTIN_LANGUAGE_(?:TS|NATIVE)\(\s*([a-z0-9_]+)\s*,", re.M)
 # set(SITTING_DUCK_LANGUAGE_MODULES python javascript ... yaml)
 MODULE_LIST = re.compile(r"set\(SITTING_DUCK_LANGUAGE_MODULES\s+(.*?)\)", re.S)
+# The WHOLE call, so KIND and PARSERS can be read, not just the name. No nested
+# parens appear inside one, so a non-greedy scan to the first `)` is exact.
+DECLARATION_CALL = re.compile(
+    r"sitting_duck_language\(\s*([a-z0-9_]+)\s+(\w+)\s+(TS|NATIVE)\s*(.*?)\)", re.S)
 
 
 def load_spec(path=SPEC):
@@ -131,6 +135,72 @@ def module_declarations(spec, root=ROOT):
             continue
         names = DECLARATION.findall(path.read_text(encoding="utf-8", errors="replace"))
         out[language] = (names, None)
+    return out
+
+
+def module_parsers(spec, root=ROOT):
+    """{language: (kind, [parser paths as written])} for every listed language.
+
+    The paths are taken VERBATIM from the module, because the defect this exists
+    for is a path that resolves somewhere the build is not allowed to read from.
+    Normalising it here would hide exactly what is being checked.
+    """
+    out = {}
+    template = spec["paths"].get("module")
+    if not template:
+        return out
+    for language in spec["registration_order"]:
+        path = root / template.format(language=language)
+        if not path.exists():
+            continue
+        text = re.sub(r"#[^\n]*", "", path.read_text(encoding="utf-8", errors="replace"))
+        m = DECLARATION_CALL.search(text)
+        if not m:
+            out[language] = (None, None)
+            continue
+        kind, body = m.group(3), m.group(4)
+        parsers = []
+        if "PARSERS" in body:
+            tail = body.split("PARSERS", 1)[1]
+            parsers = [tok for tok in tail.split() if not tok.isupper()]
+        out[language] = (kind, parsers)
+    return out
+
+
+def parser_source_fault(source, pregen_root, pregen_rel):
+    """Why one PARSERS path is unacceptable, or None.
+
+    Pulled out of check() so the self-test can plant the exact string #329 shipped
+    without writing into the tree. Two faults, and they are different: a path that
+    LEAVES the pregenerated tree compiles on a developer machine and nowhere else,
+    while a path that stays inside it and resolves to nothing fails everywhere.
+    """
+    if source.startswith("/") or ".." in pathlib.PurePosixPath(source).parts:
+        return ("leaves", f"PARSERS `{source}` leaves {pregen_rel}/. Parser paths are "
+                          f"resolved against PARSER_SOURCE_DIR, so this compiles only where "
+                          f"the grammar submodules are checked out -- the submodule-free CI "
+                          f"job and a source tarball both fail at CMake generate")
+    if not (pregen_root / source).is_file():
+        return ("missing", f"PARSERS `{source}` does not exist under {pregen_rel}/. "
+                           f"Either the parser was never committed or the path is stale")
+    return None
+
+
+def read_parser_manifest(spec, root=ROOT):
+    """{language: parser directory} from generated_parsers/MANIFEST, or None."""
+    rel = spec["paths"].get("parser_manifest")
+    if not rel:
+        return None
+    path = root / rel
+    if not path.exists():
+        return None
+    out = {}
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or ":" not in line:
+            continue
+        lang, _, parser_dir = line.partition(":")
+        out[lang.strip()] = parser_dir.strip()
     return out
 
 
@@ -414,6 +484,93 @@ def check(spec, root=ROOT, require_build=False):
                        f"(floors {floors['files_min']}/{floors['def_type_entries_min']}/"
                        f"{floors['languages_with_tables_min']})")
 
+
+    # --- 5. parser sources resolve inside PARSER_SOURCE_DIR, and the MANIFEST agrees ---
+    #
+    # THE FAILURE THIS EXISTS FOR, measured on #329 (the tsx language): a module
+    # declared `PARSERS ../grammars/tree-sitter-typescript/tsx/src/parser.c`,
+    # which resolves OUT of generated_parsers/ and into the grammar submodule.
+    # Every default build passed, because a developer checkout has the submodules.
+    # The `Runtime grammar registration tests` job checks out only duckdb,
+    # extension-ci-tools and third_party/tree-sitter -- deliberately, to prove the
+    # committed parsers are enough -- and died at CMake generate with "Cannot find
+    # source file". That job is the only thing in CI that could see it, it reports
+    # the failure as a cmake error rather than as a layout violation, and it costs
+    # a full build to find out. This check costs nothing and names the module.
+    #
+    # The MANIFEST half is the same fact in the other register: scripts/audit_*.py
+    # resolve a language to its parser through the MANIFEST, so a language absent
+    # from it is skipped by all three audits. They then pass WITHOUT HAVING LOOKED,
+    # which is indistinguishable from passing.
+    pregen_rel = spec["paths"].get("pregenerated_parsers")
+    parsers = module_parsers(spec, root)
+    if pregen_rel and parsers:
+        pregen = root / pregen_rel
+        ts_languages = set()
+        checked_paths = 0
+        for language, (kind, declared) in sorted(parsers.items()):
+            rel = spec["paths"]["module"].format(language=language)
+            if kind is None:
+                findings.append(
+                    f"{rel}: could not read its sitting_duck_language() call; the pattern "
+                    f"in this gate is wrong, not the code")
+                continue
+            if kind == "TS":
+                ts_languages.add(language)
+                if not declared:
+                    findings.append(
+                        f"{rel} declares a tree-sitter language with no PARSERS, so the "
+                        f"grammar would never be compiled in")
+            elif declared:
+                findings.append(
+                    f"{rel} declares KIND NATIVE and {len(declared)} PARSERS source(s); a "
+                    f"native adapter compiles no grammar")
+            for source in declared:
+                fault = parser_source_fault(source, pregen, pregen_rel)
+                if fault:
+                    findings.append(f"{rel}: {fault[1]}")
+                    continue
+                checked_paths += 1
+        if checked_paths == 0:
+            findings.append(
+                f"0 parser sources resolved under {pregen_rel}/; this check measured "
+                f"nothing, which is not the same as a pass")
+        else:
+            summary.append(f"parser sources: {checked_paths} files, all inside {pregen_rel}/")
+
+        manifest = read_parser_manifest(spec, root)
+        if manifest is None:
+            findings.append(
+                f"spec names `paths.parser_manifest` = {spec['paths'].get('parser_manifest')}, "
+                f"but no manifest could be read; the audits resolve every language through "
+                f"it and skip what it omits")
+        else:
+            for missing in sorted(ts_languages - set(manifest)):
+                findings.append(
+                    f"`{missing}` is a tree-sitter language with no line in "
+                    f"{spec['paths']['parser_manifest']}. audit_unreachable_declarations.py, "
+                    f"audit_anon_token_collisions.py and audit_leaf_text_gaps.py all iterate "
+                    f"that file, so they would pass over it in silence")
+            for extra in sorted(set(manifest) - ts_languages):
+                findings.append(
+                    f"{spec['paths']['parser_manifest']} lists `{extra}`, which is not a "
+                    f"registered tree-sitter language -- a stale line makes the audits "
+                    f"report on a language the build does not have")
+            for language in sorted(ts_languages & set(manifest)):
+                parser_dir = manifest[language]
+                bad = [s for s in parsers[language][1]
+                       if not s.startswith(parser_dir.rstrip("/") + "/")]
+                if bad:
+                    findings.append(
+                        f"{language}: the manifest points the audits at `{parser_dir}` while "
+                        f"{spec['paths']['module'].format(language=language)} compiles "
+                        f"`{bad[0]}`. The audits would read a different grammar from the one "
+                        f"in the binary, and agree with themselves either way")
+            if ts_languages:
+                summary.append(
+                    f"parser manifest: {len(ts_languages)} tree-sitter languages, each with a "
+                    f"line whose directory holds the sources its module compiles")
+
     return findings, summary
 
 
@@ -504,6 +661,66 @@ def self_test() -> int:
                   "not reported")
             return 1
 
+    # 5. the parser-source checks. The first plant is the exact string PR #329
+    # shipped: a PARSERS path that reaches out of generated_parsers/ and into the
+    # grammar submodule. It compiled on every machine that had the submodules and
+    # died at CMake generate on the one CI job that deliberately does not.
+    pregen_rel = spec["paths"].get("pregenerated_parsers")
+    if pregen_rel:
+        pregen = ROOT / pregen_rel
+        shipped = "../grammars/tree-sitter-typescript/tsx/src/parser.c"
+        fault = parser_source_fault(shipped, pregen, pregen_rel)
+        if not fault or fault[0] != "leaves":
+            print(f"::error::self-test FAILED: `{shipped}` was not reported as leaving "
+                  f"{pregen_rel}/ -- this is the #329 regression itself")
+            return 1
+        if parser_source_fault("zyzzyva/src/parser.c", pregen, pregen_rel)[0] != "missing":
+            print("::error::self-test FAILED: a path inside the tree that resolves to "
+                  "nothing was not reported")
+            return 1
+        real = module_parsers(spec)
+        sample = next((s for _, (k, ps) in sorted(real.items()) if k == "TS" and ps
+                       for s in ps), None)
+        if sample is None:
+            print("::error::self-test fixture is stale: no tree-sitter language declares "
+                  "PARSERS, so the pass side of this check is untested")
+            return 1
+        if parser_source_fault(sample, pregen, pregen_rel) is not None:
+            print(f"::error::self-test FAILED: the real path `{sample}` was reported as a "
+                  f"fault, so the check rejects what the build compiles")
+            return 1
+
+        # Point the pregenerated tree at nothing: every path must fail to resolve,
+        # AND the "measured nothing" guard must fire rather than an empty pass.
+        nowhere = dict(spec)
+        nowhere["paths"] = dict(spec["paths"])
+        nowhere["paths"]["pregenerated_parsers"] = "zyzzyva"
+        findings, _ = check(nowhere)
+        if not any("measured nothing" in f for f in findings):
+            print("::error::self-test FAILED: a pregenerated tree with no parsers in it "
+                  "passed the parser-source check instead of reporting an empty measurement")
+            return 1
+
+        # A manifest that cannot be read, and one that reads but omits every
+        # language. The second plant points the path at a file that is not a
+        # manifest, which is how a stale path presents: the audits then skip the
+        # languages it does not name, and pass without having looked.
+        unreadable = dict(spec)
+        unreadable["paths"] = dict(spec["paths"])
+        unreadable["paths"]["parser_manifest"] = "zyzzyva/MANIFEST"
+        findings, _ = check(unreadable)
+        if not any("no manifest could be read" in f for f in findings):
+            print("::error::self-test FAILED: a missing parser manifest was not reported")
+            return 1
+        wrong_file = dict(spec)
+        wrong_file["paths"] = dict(spec["paths"])
+        wrong_file["paths"]["parser_manifest"] = "spec/layout/layout.yaml"
+        findings, _ = check(wrong_file)
+        if not any("with no line in" in f for f in findings):
+            print("::error::self-test FAILED: a manifest that omits a tree-sitter language "
+                  "was not reported, so an audit skipping that language stays invisible")
+            return 1
+
     # 4. the floors must be reachable: a floor nothing can satisfy is not a floor.
     impossible = dict(spec)
     impossible["kit_denominator"] = dict(spec["kit_denominator"])
@@ -518,7 +735,10 @@ def self_test() -> int:
           f"membership change; detects a dropped language as a membership change; detects "
           f"path templates that resolve to nothing, both per language and at the kit "
           f"denominator; detects a module that declares a language other than its own "
-          f"directory, and a module path that resolves to nothing; and the real tree "
+          f"directory, and a module path that resolves to nothing; detects a PARSERS "
+          f"path that leaves generated_parsers/ (the #329 regression), one that resolves "
+          f"to nothing inside it, a pregenerated tree holding no parsers at all, and a "
+          f"parser manifest that is missing or omits a language; and the real tree "
           f"passes with "
           f"{d['files']} files / {d['entries']} DEF_TYPE entries / "
           f"{d['languages_with_tables']} readable tables")
