@@ -60,7 +60,8 @@ SELECT * FROM read_ast(['**/*.txt'], 'javascript');
 |----------|------------|------------|
 | Python | `'python'` | `.py` |
 | JavaScript | `'javascript'` | `.js`, `.jsx` |
-| TypeScript | `'typescript'` | `.ts`, `.tsx` |
+| TypeScript | `'typescript'` | `.ts` |
+| TSX | `'tsx'` | `.tsx` |
 | Java | `'java'` | `.java` |
 | C | `'c'` | `.c`, `.h` |
 | C++ | `'cpp'` | `.cpp`, `.hpp`, `.cc` |

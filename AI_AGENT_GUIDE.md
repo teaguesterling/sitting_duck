@@ -518,7 +518,7 @@ Returns: `file_path`, `name`, `definition_kind`, `start_line`, `end_line`, `sour
 
 | Category | Languages |
 |----------|-----------|
-| **Web** | JavaScript (.js, .jsx), TypeScript (.ts, .tsx), HTML (.html, .htm), CSS (.css) |
+| **Web** | JavaScript (.js, .jsx), TypeScript (.ts), TSX (.tsx), HTML (.html, .htm), CSS (.css) |
 | **Systems** | C (.c, .h), C++ (.cpp, .hpp, .cc, .cxx), Go (.go), Rust (.rs), Zig (.zig) |
 | **Scripting** | Python (.py), Ruby (.rb), PHP (.php), Lua (.lua), R (.r, .R), Bash (.sh, .bash) |
 | **Enterprise** | Java (.java), C# (.cs), Kotlin (.kt, .kts), Swift (.swift) |

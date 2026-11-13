@@ -22,7 +22,14 @@ JavaScript, TypeScript, HTML, and CSS support in Sitting Duck.
 
 ### Known Limitations
 
-- **JSX/TSX**: JSX elements are parsed but component detection relies on naming conventions (capitalized names).
+- **JSX/TSX**: JSX elements parse without error — `.jsx` through the javascript
+  grammar, `.tsx` through the tsx grammar — but seven JSX node types
+  (`jsx_element`, `jsx_opening_element`, `jsx_closing_element`,
+  `jsx_self_closing_element`, `jsx_attribute`, `jsx_expression`,
+  `jsx_namespace_name`) have no semantic declaration. They carry
+  `PARSER_CONSTRUCT` and an empty `name`, so a component or an attribute cannot
+  be found by name the way an HTML `element` can. Component detection relies on
+  naming conventions (capitalized names).
 - **JavaScript Types**: No type information available (dynamic typing) - `signature_type` returns `'function'` literal.
 - **TypeScript Generics**: Generic type parameters are parsed but not fully extracted.
 - **CSS Variables**: Custom properties (`--var-name`) are parsed but not semantically distinguished.
@@ -83,8 +90,12 @@ WHERE type = 'import_statement';
 
 ## TypeScript
 
-**Extensions:** `.ts`, `.tsx`
+**Extensions:** `.ts`
 **Identifier:** `'typescript'`
+
+`.tsx` is a separate language — see [TSX](#tsx) below. The typescript grammar
+has no JSX, so `read_ast('App.tsx', 'typescript')` reads no file:
+an explicit language accepts only its own extensions.
 
 ### Common Node Types
 
@@ -114,6 +125,47 @@ SELECT name, peek
 FROM read_ast('**/*.ts')
 WHERE type = 'function_declaration'
   AND peek LIKE '%<%>%';
+```
+
+---
+
+## TSX
+
+**Extensions:** `.tsx`
+**Identifier:** `'tsx'`
+
+TypeScript with JSX. It is `tree-sitter-typescript`'s second dialect: the same
+adapter, the same node declarations and the same names as TypeScript, with the
+`tsx` grammar in place of the `typescript` one.
+
+Read a `.tsx` file with the typescript grammar and every JSX block becomes
+`ERROR` nodes. Error recovery then moves the surrounding structure, so the same
+declaration lands at a different depth in two near-identical revisions of one
+file.
+
+One construct differs between the two dialects, because `<` cannot mean both:
+
+| Source | `'typescript'` | `'tsx'` |
+|--------|----------------|---------|
+| `const n = <number>raw;` | `type_assertion` | 1 `ERROR` node |
+| `const a = <div/>;` | 1 `ERROR` node | `jsx_self_closing_element` |
+| `const n = raw as number;` | `as_expression` | `as_expression` |
+
+Use `as` in `.tsx` files. Everything else — interfaces, generics, decorators,
+the `modifiers` array — behaves exactly as in TypeScript.
+
+```sql
+-- Components defined in a React tree
+SELECT file_path, name
+FROM read_ast('src/**/*.tsx')
+WHERE type IN ('function_declaration', 'class_declaration')
+  AND name = upper(name[1]) || name[2:];
+
+-- JSX is present in the tree, but unnamed: count elements, do not name them
+SELECT file_path, count(*) AS jsx_nodes
+FROM read_ast('src/**/*.tsx')
+WHERE type LIKE 'jsx_%'
+GROUP BY 1 ORDER BY 2 DESC;
 ```
 
 ---

@@ -22,7 +22,8 @@ Languages are automatically detected from file extensions:
 |--------------|----------|
 | `.py`, `.pyi`, `.pyw` | Python |
 | `.js`, `.jsx`, `.mjs` | JavaScript |
-| `.ts`, `.tsx` | TypeScript |
+| `.ts` | TypeScript |
+| `.tsx` | TSX |
 | `.java` | Java |
 | `.go` | Go |
 | `.rs`, `.rlib` | Rust |

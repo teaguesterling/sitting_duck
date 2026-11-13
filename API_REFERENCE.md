@@ -1025,7 +1025,8 @@ Currently supports **27 programming languages** with full semantic analysis:
 | Category | Languages | Extensions |
 |----------|-----------|------------|
 | **Web** | JavaScript | `.js`, `.jsx` |
-| | TypeScript | `.ts`, `.tsx` |
+| | TypeScript | `.ts` |
+| | TSX (TypeScript with JSX) | `.tsx` |
 | | HTML | `.html`, `.htm` |
 | | CSS | `.css` |
 | **Systems** | C | `.c`, `.h` |

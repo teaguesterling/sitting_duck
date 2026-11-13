@@ -22,7 +22,8 @@ Sitting Duck automatically detects languages from file extensions:
 |-----------|----------|
 | `.py` | Python |
 | `.js`, `.jsx` | JavaScript |
-| `.ts`, `.tsx` | TypeScript |
+| `.ts` | TypeScript |
+| `.tsx` | TSX |
 | `.java` | Java |
 | `.go` | Go |
 | `.rs` | Rust |
