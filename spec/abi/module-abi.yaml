@@ -124,6 +124,7 @@ native_extraction:
     - SQLAdapter
     - SwiftAdapter
     - TypeScriptAdapter
+    - TSXAdapter
 
   # Per-language adapters with no DEF_TYPE table the gate can read, so the
   # checks above are silent for them BY DECLARATION rather than by accident.
@@ -403,6 +404,7 @@ hooks:
       - RustAdapter
       - SwiftAdapter
       - TypeScriptAdapter
+      - TSXAdapter
 
   IsBareNameDefinitionField:
     signature: "bool(TSNode self, TSNode parent, const char *parent_type)"
@@ -415,6 +417,7 @@ hooks:
       - RAdapter
       - RustAdapter
       - TypeScriptAdapter
+      - TSXAdapter
 
 # Conventions the extractors share. Named here because a module that breaks one
 # produces plausible, wrong output rather than an error.

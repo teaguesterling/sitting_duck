@@ -85,7 +85,7 @@ WHERE node_type IN ('typeof','of','only')
    OR (language IN ('swift') AND node_type = 'operator')
    OR (language IN ('rust','kotlin','swift') AND node_type = 'as');
 ----
-9
+11
 
 query I
 SELECT count(*) FROM ast_type_map()
@@ -144,6 +144,7 @@ r	in	FLOW_LOOP
 ruby	in	OPERATOR_COMPARISON
 rust	in	FLOW_LOOP
 swift	in	FLOW_LOOP
+tsx	in	OPERATOR_COMPARISON
 typescript	in	OPERATOR_COMPARISON
 
 # `is` and `instanceof` are type TESTS yielding a boolean, which is a comparison
@@ -161,6 +162,8 @@ python	is	OPERATOR_COMPARISON
 sql	is_not	OPERATOR_COMPARISON
 sql	not_in	OPERATOR_COMPARISON
 swift	is	OPERATOR_COMPARISON
+tsx	instanceof	OPERATOR_COMPARISON
+tsx	is	TYPE_REFERENCE
 typescript	instanceof	OPERATOR_COMPARISON
 typescript	is	TYPE_REFERENCE
 

@@ -153,4 +153,5 @@ ORDER BY language;
 dart	12
 javascript	8
 sql	10
+tsx	13
 typescript	13

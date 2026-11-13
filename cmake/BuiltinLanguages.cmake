@@ -62,7 +62,7 @@ endmacro()
 set(SITTING_DUCK_LANGUAGE_MODULES
     python javascript cpp typescript sql duckdb go ruby markdown java php html
     css c rust json bash swift r kotlin csharp lua hcl graphql toml zig dart
-    yaml)
+    yaml tsx)
 
 set(SITTING_DUCK_LANGUAGES_DIR "${CMAKE_CURRENT_SOURCE_DIR}/languages"
     CACHE PATH "Directory holding the per-language module.cmake files")
