@@ -1,68 +1,139 @@
 # name: test/sql/ast_select_selector_list.test
 # group: [sql]
 
-# Issue #330: a top-level selector list ("A, B") is well-formed CSS, but
-# ast_select matched it as one compound selector and silently returned 0 rows.
-# Until lists are supported, a list must raise and name the workaround, so a
-# caller never reads "no match" from a query that was not answered (#89).
+# Issue #330: a top-level selector list ("A, B") is well-formed CSS. Before the
+# fix, ast_select matched it as one compound selector and silently returned
+# 0 rows (#89).
+#
+# Contract:
+# - A list whose items are plain type / .class / #id compounds returns the
+#   UNION of what each item returns alone: every matching node once, in the
+#   usual (file_path, node_id) order.
+# - A list with any other kind of item (combinator, pseudo-class, attribute,
+#   pseudo-element) raises and names the workaround, rather than returning a
+#   partial answer.
 
 require sitting_duck
 
 statement ok
 LOAD sitting_duck;
 
-# Each item alone matches: the fixture has the definitions the list asks for.
+statement ok
+CREATE TABLE qn AS SELECT * FROM read_ast('test/data/python/qualified_names.py');
+
+# Fixture facts the assertions below rely on.
+query III
+SELECT (SELECT count(*) FROM ast_select_from('qn', '.func')),
+       (SELECT count(*) FROM ast_select_from('qn', '.class')),
+       (SELECT count(*) FROM ast_select_from('qn', '.call'));
+----
+6	3	2
+
+# --- A simple list equals the UNION of its items, in both directions ---
+
+statement ok
+CREATE TABLE got AS SELECT file_path, node_id FROM ast_select_from('qn', '.func, .class');
+
+statement ok
+CREATE TABLE want AS
+SELECT file_path, node_id FROM ast_select_from('qn', '.func')
+UNION
+SELECT file_path, node_id FROM ast_select_from('qn', '.class');
+
+query III
+SELECT (SELECT count(*) FROM got),
+       (SELECT count(*) FROM (FROM got EXCEPT FROM want)),
+       (SELECT count(*) FROM (FROM want EXCEPT FROM got));
+----
+9	0	0
+
+# Without spaces, and with three items.
 query I
-SELECT count(*) FROM ast_select('test/data/python/qualified_names.py', '.func');
+SELECT count(*) FROM ast_select_from('qn', '.func,.class');
+----
+9
+
+query I
+SELECT count(*) FROM ast_select_from('qn', '.func, .class, .call');
+----
+11
+
+# #id compounds: the locator case. Each name once, from one call.
+query II
+SELECT name, type FROM ast_select_from('qn', '.func#validate, .func#top_level_function');
+----
+validate	function_definition
+top_level_function	function_definition
+
+# A bare type item, mixed with a compound item.
+query I
+SELECT count(*) FROM ast_select_from('qn', 'function_definition#nested_helper, .class');
+----
+4
+
+# An item that matches nothing adds nothing; it does not empty the list.
+query I
+SELECT count(*) FROM ast_select_from('qn', '.func#validate, .func#no_such_name');
+----
+1
+
+# Overlapping items return each node once.
+query I
+SELECT count(*) FROM ast_select_from('qn', '.func, .func, function_definition');
 ----
 6
 
-# --- A top-level list raises, with and without spaces, any number of items ---
-
-statement error
-SELECT * FROM ast_select('test/data/python/qualified_names.py', '.func, .class');
+# Rows come back in (file_path, node_id) order, like any other selector.
+query I
+SELECT count(*) FROM (
+    SELECT node_id, lag(node_id) OVER () AS prev
+    FROM ast_select_from('qn', '.class, .func')
+) WHERE prev IS NOT NULL AND node_id < prev;
 ----
-selector lists
+0
 
-statement error
-SELECT * FROM ast_select('test/data/python/qualified_names.py', '.func,.class');
+# ast_select (path form) takes the same path.
+query I
+SELECT count(*) FROM ast_select('test/data/python/qualified_names.py', '.func, .class');
 ----
-selector lists
+9
+
+# --- A list with a non-simple item raises, naming the issue and the workaround ---
 
 statement error
-SELECT * FROM ast_select('test/data/python/qualified_names.py', '.func, .class, .call');
-----
-selector lists
-
-# The message names the issue and the workaround.
-statement error
-SELECT * FROM ast_select('test/data/python/qualified_names.py', '.func#a, .func#b');
+SELECT * FROM ast_select_from('qn', '.func:has(.call), .class');
 ----
 issue #330
 
 statement error
-SELECT * FROM ast_select('test/data/python/qualified_names.py', '.func#a, .func#b');
+SELECT * FROM ast_select_from('qn', '.class .func, .call');
+----
+issue #330
+
+statement error
+SELECT * FROM ast_select_from('qn', '.func[name=validate], .class');
+----
+issue #330
+
+statement error
+SELECT * FROM ast_select_from('qn', '.class, .func::callers');
+----
+issue #330
+
+statement error
+SELECT * FROM ast_select_from('qn', '.class, .func:not(.call)');
 ----
 UNION
 
-# ast_select_from takes the same path.
-statement ok
-CREATE TABLE qn AS SELECT * FROM read_ast('test/data/python/qualified_names.py');
+# --- Not a top-level list: these keep their single-selector behaviour ---
 
-statement error
-SELECT * FROM ast_select_from('qn', '.func, .class');
+statement ok
+SELECT * FROM ast_select_from('qn', '.func:not(.class, .call)');
+
+statement ok
+SELECT * FROM ast_select_from('qn', '.func:has(.call, .class)');
+
+query I
+SELECT count(*) FROM ast_select_from('qn', '.class .func');
 ----
-selector lists
-
-# --- Not a top-level list: these must keep working ---
-
-# A comma inside pseudo-class arguments is not a top-level list.
-statement ok
-SELECT * FROM ast_select('test/data/python/qualified_names.py', '.func:not(.class, .call)');
-
-statement ok
-SELECT * FROM ast_select('test/data/python/qualified_names.py', '.func:has(.call, .class)');
-
-# A single selector with a combinator is unaffected.
-statement ok
-SELECT * FROM ast_select('test/data/python/qualified_names.py', '.class .func');
+4
