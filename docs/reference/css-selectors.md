@@ -290,7 +290,9 @@ ast_selector_for(source, target_file, target_node_id)
 
 Candidates use the node's semantic class or type with its name, the call receiver, the nearest named enclosing function or class, and as a fallback its location (`[file$=…][line=…]`). Names that are not plain identifiers cannot be written as `#name` and are left out. A node that is not in the table raises an error.
 
-### Multi-Rule Dispatch (v1.7.0+, currently WIP)
+### Multi-Rule Dispatch (not available yet)
+
+> **Not available.** Both macros raise an error that names the cause. They run `ast_select` once per rule through a `LATERAL` join, and DuckDB cannot bind a column-valued selector there (duckdb/duckdb#21890). Call `ast_select` once per rule instead. For rules whose selectors are plain type, `.class` or `#id` items, one selector list (`'A, B'`) answers them in one call (issue #330). The section below describes the intended shape.
 
 For queries that contain **multiple CSS rules** — each with its own selector and declaration block — sitting_duck provides two macros that dispatch `ast_select` once per rule and tag the matches with per-rule metadata.
 

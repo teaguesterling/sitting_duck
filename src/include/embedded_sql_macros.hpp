@@ -5635,7 +5635,10 @@ CREATE OR REPLACE MACRO ast_selector_for(
 --     Nested form: one row per rule, with matches packed into a LIST<STRUCT>.
 --     Columns: rule_index, selector, declarations, matches.
 --
--- STATUS (as of commit where this file is introduced): WIP.
+-- STATUS: NOT AVAILABLE. Both macros raise a clear error (2026-11-13). Measured
+-- on main 893966a and registry v1.18.4: the dispatch failed at bind time with
+-- "Table function read_ast does not support lateral join column parameters".
+-- The history below explains the original WIP state.
 --
 -- The implementation dispatches ast_select() per rule via a lateral join with
 -- the selector as a column reference. Column-valued selector dispatch through
@@ -5696,93 +5699,13 @@ CREATE OR REPLACE MACRO ast_selector_for(
 -- (tracker/bugs/040, upstream duckdb/duckdb#26036). A C++ implementation makes
 -- the macro body, and therefore the regression, moot.
 CREATE OR REPLACE MACRO ast_select_rules(source, query, language := NULL) AS TABLE
-    WITH
-        -- Parse the entire query as CSS, one pass. Literal at bind time
-        -- because `query` is the macro's own parameter — parse_ast's
-        -- table-function literal-only restriction is satisfied via macro
-        -- parameter substitution.
-        --
-        -- IMPORTANT: `query` must be fully-formed CSS, i.e. include braces
-        -- even for empty declaration blocks:
-        --   GOOD: '.fn#main {}'
-        --   GOOD: '.fn#main { show: body; }'
-        --   BAD:  '.fn#main'   (bare selector — use ast_select instead)
-        --
-        -- The natural normalization `CASE WHEN strpos(query,'{')=0 THEN
-        -- query || ' {}' ELSE query END` would require a subquery wrapper,
-        -- which parse_ast (table function) rejects with "Table function
-        -- cannot contain subqueries". ast_select handles bare selectors
-        -- just fine; ast_select_rules's niche is multi-rule queries where
-        -- callers are expected to include the declaration blocks naturally.
-        full_css AS (
-            SELECT * FROM parse_ast(query, 'css')
-        ),
-
-        -- Each rule_set in the parsed CSS is one CSS rule.
-        rule_sets AS (
-            SELECT node_id AS rule_id,
-                   row_number() OVER (ORDER BY node_id) - 1 AS rule_index
-            FROM full_css
-            WHERE type = 'rule_set'
-        ),
-
-        -- Extract the selector text for each rule. sitting_duck's CSS grammar
-        -- populates the `selectors` node's .name field with the raw selector
-        -- text (e.g., ".fn#main" or "function_definition:has(return_statement)").
-        rule_selectors AS (
-            SELECT rs.rule_id,
-                   rs.rule_index,
-                   sel.name AS selector
-            FROM rule_sets rs
-            JOIN full_css sel ON sel.parent_id = rs.rule_id AND sel.type = 'selectors'
-        ),
-
-        -- Extract per-rule declarations as MAP(property_name → raw value span).
-        -- The value is the text between `:` and `;` in the declaration's peek,
-        -- with leading/trailing whitespace and the trailing `;` stripped.
-        --
-        -- Empty declaration blocks (e.g., `.fn {}`) produce an empty MAP{}
-        -- via the COALESCE fallback, not NULL.
-        rule_declarations AS (
-            SELECT rs.rule_id,
-                   COALESCE(
-                       MAP(
-                           list(pn.name)
-                               FILTER (WHERE pn.name IS NOT NULL),
-                           list(
-                               rtrim(
-                                   ltrim(
-                                       substring(d.peek FROM position(':' IN d.peek) + 1)
-                                   ),
-                                   '; '
-                               )
-                           )
-                               FILTER (WHERE d.peek IS NOT NULL)
-                       ),
-                       MAP([]::VARCHAR[], []::VARCHAR[])
-                   ) AS declarations
-            FROM rule_sets rs
-            LEFT JOIN full_css b  ON b.parent_id  = rs.rule_id AND b.type = 'block'
-            LEFT JOIN full_css d  ON d.parent_id  = b.node_id  AND d.type = 'declaration'
-            LEFT JOIN full_css pn ON pn.parent_id = d.node_id  AND pn.type = 'property_name'
-            GROUP BY rs.rule_id
-        )
-
-    -- Dispatch ast_select per rule. This is the line blocked on the upstream
-    -- DuckDB planner bug: ast_select's `sel` CTE is parameterized from the
-    -- `selector` argument, and the outer body has correlated NOT EXISTS
-    -- patterns over that parameterized CTE that crash during bind.
-    --
-    -- LEFT JOIN LATERAL preserves rules that match zero nodes: they emit one
-    -- row with NULL read_ast columns, so the caller's N-rules-in-N-rows-out
-    -- invariant holds.
-    SELECT rsel.rule_index,
-           rsel.selector,
-           rd.declarations,
-           m.*
-    FROM rule_selectors rsel
-    JOIN rule_declarations rd USING (rule_id)
-    LEFT JOIN LATERAL ast_select(source, rsel.selector, language := language) m ON TRUE;
+    -- Not available (see STATUS above). The per-rule dispatch body this replaced
+    -- is in git: `git show 893966a:src/sql_macros/ast_select_rules.sql`. Restore
+    -- it when duckdb/duckdb#21890 lands, or replace it with the C++ selector
+    -- engine (tracker/features/046). Until then a call raises a message that
+    -- names the cause, instead of a binder error about read_ast's lateral
+    -- parameters that named neither macro nor the reason.
+    SELECT error('ast_select_rules is not available yet: it runs ast_select once per rule through a LATERAL join, and DuckDB cannot bind a column-valued selector there (duckdb/duckdb#21890). Call ast_select once per rule, or use one selector list such as ''A, B'' (issue #330).') AS unavailable;
 
 
 -- =============================================================================
@@ -5803,13 +5726,8 @@ CREATE OR REPLACE MACRO ast_select_rules(source, query, language := NULL) AS TAB
 -- (tracker/bugs/040, upstream duckdb/duckdb#26036). A C++ implementation makes
 -- the macro body, and therefore the regression, moot.
 CREATE OR REPLACE MACRO ast_select_list(source, query, language := NULL) AS TABLE
-    SELECT rule_index,
-           any_value(selector)     AS selector,
-           any_value(declarations) AS declarations,
-           list(m) FILTER (WHERE m.node_id IS NOT NULL) AS matches
-    FROM ast_select_rules(source, query, language := language) m
-    GROUP BY rule_index
-    ORDER BY rule_index;
+    -- Not available: it wraps ast_select_rules (see that macro).
+    SELECT error('ast_select_rules is not available yet: it runs ast_select once per rule through a LATERAL join, and DuckDB cannot bind a column-valued selector there (duckdb/duckdb#21890). Call ast_select once per rule, or use one selector list such as ''A, B'' (issue #330).') AS unavailable;
 
 )SQLMACRO"},
     {"scope_resolution.sql", R"SQLMACRO(

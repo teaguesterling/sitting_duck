@@ -38,6 +38,25 @@ WHERE function_name IN ('ast_select_rules', 'ast_select_list');
 ----
 2
 
+# Calling either macro raises a message that says why and what to use instead.
+# Before, the call failed with a binder error about read_ast's lateral
+# parameters, which named neither macro nor the reason (measured on main
+# 893966a and on registry v1.18.4).
+statement error
+SELECT * FROM ast_select_rules('test/data/python/simple.py', '.func {}');
+----
+ast_select_rules is not available yet
+
+statement error
+SELECT * FROM ast_select_list('test/data/python/simple.py', '.func {}');
+----
+ast_select_rules is not available yet
+
+statement error
+SELECT * FROM ast_select_rules('test/data/python/simple.py', '.func {}');
+----
+duckdb/duckdb#21890
+
 # ============================================================================
 # TODO(upstream-fix): single rule, simple selector with declaration block.
 # Uncomment after duckdb/duckdb#21890 lands.
