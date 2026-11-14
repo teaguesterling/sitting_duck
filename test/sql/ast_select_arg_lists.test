@@ -1,0 +1,118 @@
+# name: test/sql/ast_select_arg_lists.test
+# group: [sql]
+
+# Issue #330 follow-up: lists and simple selectors inside :has() and :not().
+#
+# Before the fix (measured on main 893966a):
+#   - :has(A, B) used the FIRST type/#id/.class anywhere in its arguments, so
+#     :has(#zz, #a) asked for #zz only and items mixed across the comma.
+#   - :not(A) with a type/.class/#id argument was silently DROPPED: .func:not(#a)
+#     returned every function.
+#
+# Contract (standard CSS):
+#   - :has(A, B)  -> the node has a descendant matching A OR B.
+#   - Two :has()  -> both must hold.
+#   - :not(A, B)  -> the node itself matches neither A nor B.
+#   - :not(:has(A, B)) -> the node has no descendant matching A or B.
+#   - Anything inside :not() that is not a type/.class/#id compound, a
+#     pseudo-class or :has() raises instead of being dropped.
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+statement ok
+CREATE TABLE al AS SELECT * FROM read_ast('test/data/python/selectors/arg_lists.py');
+
+# Fixture facts: functions a, b, c and method m; a and m call foo, b calls bar.
+query I
+SELECT string_agg(name, ',' ORDER BY node_id) FROM ast_select_from('al', '.func');
+----
+a,b,c,m
+
+query I
+SELECT string_agg(name, ',' ORDER BY node_id) FROM ast_select_from('al', '.func:has(.call#foo)');
+----
+a,m
+
+# --- :has() with a list: any item ---
+
+query I
+SELECT string_agg(name, ',' ORDER BY node_id) FROM ast_select_from('al', '.func:has(.call#foo, .call#bar)');
+----
+a,b,m
+
+# Order of items does not matter; an item that matches nothing adds nothing.
+query I
+SELECT string_agg(name, ',' ORDER BY node_id) FROM ast_select_from('al', '.func:has(.call#zz, .call#bar)');
+----
+b
+
+# Two items that each match nothing give nothing.
+query I
+SELECT count(*) FROM ast_select_from('al', '.func:has(.call#zz, .call#yy)');
+----
+0
+
+# Two :has() pseudo-classes must both hold.
+query I
+SELECT count(*) FROM ast_select_from('al', '.func:has(.call#foo):has(.call#bar)');
+----
+0
+
+# --- :not() with type / .class / #id items ---
+
+query I
+SELECT string_agg(name, ',' ORDER BY node_id) FROM ast_select_from('al', '.func:not(#a)');
+----
+b,c,m
+
+query I
+SELECT string_agg(name, ',' ORDER BY node_id) FROM ast_select_from('al', '.func:not(#a, #b)');
+----
+c,m
+
+query I
+SELECT count(*) FROM ast_select_from('al', '.func:not(function_definition)');
+----
+0
+
+query I
+SELECT string_agg(name, ',' ORDER BY node_id) FROM ast_select_from('al', '.call:not(#foo)');
+----
+bar
+
+# A compound item excludes only nodes matching ALL of its parts.
+query I
+SELECT string_agg(name, ',' ORDER BY node_id) FROM ast_select_from('al', '.func:not(function_definition#c)');
+----
+a,b,m
+
+# --- :not(:has(...)) with a list ---
+
+query I
+SELECT string_agg(name, ',' ORDER BY node_id) FROM ast_select_from('al', '.func:not(:has(.call))');
+----
+c
+
+query I
+SELECT string_agg(name, ',' ORDER BY node_id) FROM ast_select_from('al', '.func:not(:has(.call#foo, .call#bar))');
+----
+c
+
+# :not() with a pseudo-class keeps working.
+statement ok
+SELECT * FROM ast_select_from('al', '.func:not(:is-called)');
+
+# --- Unsupported items inside :not() raise instead of being dropped ---
+
+statement error
+SELECT * FROM ast_select_from('al', '.func:not([name=a])');
+----
+:not(
+
+statement error
+SELECT * FROM ast_select_from('al', '.func:not(.class .func)');
+----
+:not(
