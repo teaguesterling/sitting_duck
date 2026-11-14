@@ -6,11 +6,11 @@ c:tree-sitter-c
 cpp:tree-sitter-cpp
 javascript:tree-sitter-javascript
 typescript:tree-sitter-typescript/typescript
-# tsx is tree-sitter-typescript's second dialect. Its parser.c is upstream's
-# own (LANGUAGE_VERSION 14), not a 0.26.0 regeneration: `tree-sitter generate`
-# fails on BOTH dialects of this grammar at the pinned CLI (tracker/bugs/063).
-# The file here is byte-identical to the submodule's, which is what the build
-# compiled before it moved in here.
+# tsx is tree-sitter-typescript's second dialect. Both dialects were
+# regenerated on 2026-11-13 with the same 0.26.0 CLI as the rest, once
+# patches/fix-typescript-using-conflict.patch removed the overlay's obsolete
+# `optional('using')` -- before that neither dialect would generate at all
+# (tracker/bugs/063). tsx moved from the upstream ABI-14 parser to ABI 15 then.
 tsx:tree-sitter-typescript/tsx
 python:tree-sitter-python
 sql:tree-sitter-sql

@@ -201,13 +201,12 @@ generate_parser() {
 # Main grammar list with their configurations
 # Format: grammar_name:subdir:has_scanner
 #
-# NOT LISTED: tsx, the second dialect of tree-sitter-typescript. Measured
-# 2026-11-13: `tree-sitter generate` fails for tsx AND for typescript at this
-# tree's CLI, with "Unresolved conflict for symbol sequence: 'using' identifier
-# . '!'". The cause is not established -- neither submodule pin has moved since
-# generated_parsers/ was built on 2026-08-31 -- so the typescript entry below is
-# listed but currently fails, and generated_parsers/tree-sitter-typescript/tsx/
-# holds upstream's own parser (ABI 14). See tracker/bugs/063.
+# tsx, the second dialect of tree-sitter-typescript, IS listed below. It could
+# not be until 2026-11-13: both dialects failed with "Unresolved conflict for
+# symbol sequence: 'using' identifier . '!'", because the javascript pin moved
+# to a grammar with a first-class using_declaration while this overlay stayed
+# on 2025-01-30. patches/fix-typescript-using-conflict.patch drops the overlay's
+# obsolete `optional('using')`, which resolves it. See tracker/bugs/063.
 #
 # NOT LISTED: yaml. Its grammar.js post-processes the output of grammar() --
 # `module.exports = global_alias(global_alias(module.exports, {...}))` -- and
@@ -221,6 +220,7 @@ GRAMMARS=(
     "cpp:tree-sitter-cpp:true"
     "javascript:tree-sitter-javascript:true"
     "typescript:tree-sitter-typescript/typescript:true"
+    "tsx:tree-sitter-typescript/tsx:true"
     "python:tree-sitter-python:true"
     "sql:tree-sitter-sql:true"
     "go:tree-sitter-go:false"
@@ -249,6 +249,9 @@ GRAMMARS=(
 PATCHES=(
     "cpp:fix-cpp-grammar-require"
     "typescript:fix-typescript-grammar-require"
+    # The grammar_name field above is decorative: main() applies every patch in
+    # this list before generating anything, so two entries for one grammar work.
+    "typescript:fix-typescript-using-conflict"
     "rust:fix-rust-grammar-regex"
     "php:fix-php-scanner-assert"
 )

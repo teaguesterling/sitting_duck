@@ -172,6 +172,23 @@ DEF_TYPE("variable_declaration", DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_
 DEF_TYPE("lexical_declaration", DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::NAME_DEFINITION)
 
 /**
+ * @brief Using declaration: `using f = open()`, `await using f = open()`
+ * Explicit Resource Management (TC39). Block-scoped like `let`, and disposes at
+ * scope exit. Declared beside lexical_declaration because it IS one of these
+ * statements, not a kind of expression -- which is what it was in `.ts` until
+ * tracker/bugs/063: the typescript overlay spelled it as an assignment
+ * expression carrying a stray `using` token, so the declared name was not a
+ * definition at all. Reaches typescript and tsx through the #include in
+ * typescript_types.def.
+ *
+ * NOT the same node as cpp's `using_declaration` (`using std::vector;`), which
+ * cpp_types.def declares as EXTERNAL_IMPORT. One raw_type string, two
+ * languages, two unrelated constructs -- which is why these tables are per
+ * language.
+ */
+DEF_TYPE("using_declaration", DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::NAME_DEFINITION)
+
+/**
  * @brief Variable declarator: `name = value` within declaration
  */
 DEF_TYPE("variable_declarator", DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::NAME_DEFINITION)

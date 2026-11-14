@@ -1,0 +1,21 @@
+diff --git a/grammars/tree-sitter-typescript/common/define-grammar.js b/grammars/tree-sitter-typescript/common/define-grammar.js
+index efb0b76..ddf8b31 100644
+--- a/grammars/tree-sitter-typescript/common/define-grammar.js
++++ b/grammars/tree-sitter-typescript/common/define-grammar.js
+@@ -196,7 +196,15 @@ module.exports = function defineGrammar(dialect) {
+       )),
+ 
+       assignment_expression: $ => prec.right('assign', seq(
+-        optional('using'),
++        // `optional('using')` stood here. It dates from when
++        // tree-sitter-javascript had no `using` support, so this overlay
++        // approximated an Explicit Resource Management declaration as an
++        // assignment expression carrying a stray keyword. javascript gained a
++        // first-class `using_declaration` in the upstream this repo has pinned
++        // since 2026-08-31, and the two rules then both matched
++        // `using x = expr`. No conflicts entry can settle that: it is one
++        // construct with two spellings inside one grammar. Dropping this makes
++        // `.ts` and `.tsx` agree with `.js`. See tracker/bugs/063.
+         field('left', choice($.parenthesized_expression, $._lhs_expression)),
+         '=',
+         field('right', $.expression),
