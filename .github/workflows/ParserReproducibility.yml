@@ -1,9 +1,10 @@
 # Is generated_parsers/ still the parsers the grammar pins produce?
 #
 # NOT in MainDistributionPipeline.yml on purpose. This job builds the
-# tree-sitter CLI from source and regenerates 27 grammars -- about 25 minutes
-# measured on a 4-core box -- so it runs on dispatch and on a schedule, never on
-# a push. The cheap half of the same contract runs on every PR, in the
+# tree-sitter CLI from source and regenerates 27 grammars, so it runs on
+# dispatch and on a schedule, never on a push. The regeneration itself is 6m01s
+# on 4 cores (measured 2026-11-14 by the script, on longbottom); the CLI build
+# is the rest of the budget below. The cheap half of the same contract runs on every PR, in the
 # `layout and registration order` job: that one checks that a module's PARSERS
 # path resolves inside generated_parsers/ and that every tree-sitter language
 # has a MANIFEST line, which is static and costs nothing.

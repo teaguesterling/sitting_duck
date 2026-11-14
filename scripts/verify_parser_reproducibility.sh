@@ -35,9 +35,13 @@
 #
 # COST, and why this is not a per-PR job
 # --------------------------------------
-# It regenerates 27 grammars. Measured 2026-11-13 on longbottom: about 25
-# minutes wall-clock with 4 cores. It belongs on workflow_dispatch and a
-# schedule, not on every push. The cheap half of the same contract -- that every
+# It regenerates 27 grammars. Measured 2026-11-14 on longbottom, by THIS script
+# rather than by the hand survey that preceded it: 6m01s wall-clock with 4
+# cores, 07:59:13 to 08:05:14. The header said "about 25 minutes" until that
+# run; that figure came from the survey, which regenerated serially and counted
+# differently, and no run of this script had ever completed when it was written.
+# It still belongs on workflow_dispatch and a schedule rather than every push,
+# because CI also has to build the CLI from source first. The cheap half of the same contract -- that every
 # module's PARSERS path resolves inside generated_parsers/ and that every
 # tree-sitter language has a MANIFEST line -- IS a per-PR check, in
 # scripts/verify_layout_invariance.py.
@@ -50,7 +54,21 @@
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CLI="${TREE_SITTER_CLI:-$ROOT/third_party/tree-sitter/target/release/tree-sitter}"
+
+# The CLI, in order: an explicit TREE_SITTER_CLI, this tree's own build, then
+# the MAIN WORKTREE's. That last one matters because this repo is used through
+# git worktrees and `third_party/` is not checked out in them -- measured
+# 2026-11-14, the first real run of this script exited 2 from a worktree while
+# the binary sat in the main tree all along. CI needs none of this: its
+# workflow builds the CLI from the pinned submodule before calling us.
+if [ -n "${TREE_SITTER_CLI:-}" ]; then
+    CLI="$TREE_SITTER_CLI"; CLI_FROM="TREE_SITTER_CLI"
+elif [ -x "$ROOT/third_party/tree-sitter/target/release/tree-sitter" ]; then
+    CLI="$ROOT/third_party/tree-sitter/target/release/tree-sitter"; CLI_FROM="this tree"
+else
+    _main_wt="$(git -C "$ROOT" worktree list --porcelain 2>/dev/null | awk '/^worktree /{print $2; exit}')"
+    CLI="${_main_wt:-$ROOT}/third_party/tree-sitter/target/release/tree-sitter"; CLI_FROM="main worktree"
+fi
 KEEP=0
 SELF_TEST=0
 ONLY=""
@@ -107,8 +125,9 @@ if [ "$SELF_TEST" -eq 1 ]; then
   exit 0
 fi
 
-[ -x "$CLI" ] || { echo "::error::no tree-sitter CLI at $CLI. Build it: (cd third_party/tree-sitter && cargo build --release --bin tree-sitter)"; exit 2; }
+[ -x "$CLI" ] || { echo "::error::no tree-sitter CLI at $CLI (looked: TREE_SITTER_CLI, this tree, the main worktree). Build it: (cd third_party/tree-sitter && cargo build --release --bin tree-sitter)"; exit 2; }
 cd "$ROOT" || exit 2
+echo "cli:       $CLI ($CLI_FROM, $("$CLI" --version 2>/dev/null))"
 
 printf '%-12s %-10s %-11s %s\n' LANGUAGE RESULT STATES NOTE
 fail=0; ok=0; exempt=0; stale=0
