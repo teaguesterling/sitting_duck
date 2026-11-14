@@ -35,22 +35,54 @@
 #
 # COST, and why this is not a per-PR job
 # --------------------------------------
-# It regenerates 27 grammars. Measured 2026-11-13 on longbottom: about 25
-# minutes wall-clock with 4 cores. It belongs on workflow_dispatch and a
-# schedule, not on every push. The cheap half of the same contract -- that every
+# It regenerates 27 grammars. Measured 2026-11-14 on longbottom, by THIS script
+# rather than by the hand survey that preceded it: 6m01s wall-clock with 4
+# cores, 07:59:13 to 08:05:14. The header said "about 25 minutes" until that
+# run; that figure came from the survey, which regenerated serially and counted
+# differently, and no run of this script had ever completed when it was written.
+# It still belongs on workflow_dispatch and a schedule rather than every push,
+# because CI also has to build the CLI from source first. The cheap half of the same contract -- that every
 # module's PARSERS path resolves inside generated_parsers/ and that every
 # tree-sitter language has a MANIFEST line -- IS a per-PR check, in
 # scripts/verify_layout_invariance.py.
 #
 # SIDE EFFECTS
 # ------------
-# Generation writes into the grammar submodules. Each is restored to its pin
-# afterwards, so a clean tree stays clean; `--keep` skips the restore when you
-# want to inspect the output.
+# Generation writes into the grammar submodules. The restore puts each one back
+# exactly as this script found it -- tracked content via `git checkout`, and any
+# file that APPEARED while we ran, by comparing git's untracked list before and
+# after. `--keep` skips the restore when you want to inspect the output.
+#
+# The before/after comparison is the point, rather than deleting by pattern. Two
+# different kinds of leftover showed up on 2026-11-14, and a rule written for
+# either one alone misses the other:
+#
+#   * `patch` leaves `*.orig` beside every file it edits -- 4 submodules;
+#   * regeneration CREATES files the grammar's own repo never tracked, so
+#     `git checkout` cannot remove them: tree-sitter-graphql gained
+#     src/tree_sitter/{alloc,array}.h, because that grammar predates the CLI
+#     shipping those headers.
+#
+# Removing only what appeared also means a developer's own untracked files in a
+# submodule survive, which a blanket `git clean -fd` would not.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CLI="${TREE_SITTER_CLI:-$ROOT/third_party/tree-sitter/target/release/tree-sitter}"
+
+# The CLI, in order: an explicit TREE_SITTER_CLI, this tree's own build, then
+# the MAIN WORKTREE's. That last one matters because this repo is used through
+# git worktrees and `third_party/` is not checked out in them -- measured
+# 2026-11-14, the first real run of this script exited 2 from a worktree while
+# the binary sat in the main tree all along. CI needs none of this: its
+# workflow builds the CLI from the pinned submodule before calling us.
+if [ -n "${TREE_SITTER_CLI:-}" ]; then
+    CLI="$TREE_SITTER_CLI"; CLI_FROM="TREE_SITTER_CLI"
+elif [ -x "$ROOT/third_party/tree-sitter/target/release/tree-sitter" ]; then
+    CLI="$ROOT/third_party/tree-sitter/target/release/tree-sitter"; CLI_FROM="this tree"
+else
+    _main_wt="$(git -C "$ROOT" worktree list --porcelain 2>/dev/null | awk '/^worktree /{print $2; exit}')"
+    CLI="${_main_wt:-$ROOT}/third_party/tree-sitter/target/release/tree-sitter"; CLI_FROM="main worktree"
+fi
 KEEP=0
 SELF_TEST=0
 ONLY=""
@@ -107,8 +139,9 @@ if [ "$SELF_TEST" -eq 1 ]; then
   exit 0
 fi
 
-[ -x "$CLI" ] || { echo "::error::no tree-sitter CLI at $CLI. Build it: (cd third_party/tree-sitter && cargo build --release --bin tree-sitter)"; exit 2; }
+[ -x "$CLI" ] || { echo "::error::no tree-sitter CLI at $CLI (looked: TREE_SITTER_CLI, this tree, the main worktree). Build it: (cd third_party/tree-sitter && cargo build --release --bin tree-sitter)"; exit 2; }
 cd "$ROOT" || exit 2
+echo "cli:       $CLI ($CLI_FROM, $("$CLI" --version 2>/dev/null))"
 
 printf '%-12s %-10s %-11s %s\n' LANGUAGE RESULT STATES NOTE
 fail=0; ok=0; exempt=0; stale=0
@@ -126,6 +159,8 @@ while IFS=: read -r lang rel; do
   fi
 
   st="$(mktemp -d)"
+  untracked_before="$(mktemp)"
+  git -C "$sub" ls-files --others --exclude-standard >"$untracked_before" 2>/dev/null
   [ -n "${PATCH_NAME[$lang]:-}" ] && bash scripts/apply_grammar_patches.sh "${PATCH_NAME[$lang]}" "$ROOT" "$ROOT/patches" "$st" >/dev/null 2>&1
   out="$( cd "grammars/$rel" && timeout 600 "$CLI" generate 2>&1 )"; rc=$?
   rm -rf "$st"
@@ -154,7 +189,15 @@ while IFS=: read -r lang rel; do
       fail=$((fail+1))
     fi
   fi
-  [ "$KEEP" -eq 1 ] || git -C "$sub" checkout -- . >/dev/null 2>&1
+  if [ "$KEEP" -ne 1 ]; then
+    git -C "$sub" checkout -- . >/dev/null 2>&1
+    # Remove only what appeared while we ran. Anything untracked that was
+    # already there before is somebody else's and stays.
+    git -C "$sub" ls-files --others --exclude-standard 2>/dev/null \
+      | grep -Fxv -f "$untracked_before" 2>/dev/null \
+      | while IFS= read -r appeared; do rm -f "$sub/$appeared"; done
+  fi
+  rm -f "$untracked_before"
 done < generated_parsers/MANIFEST
 
 echo
