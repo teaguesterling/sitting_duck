@@ -4629,32 +4629,56 @@ CREATE OR REPLACE MACRO ast_select_from(
                     AND n.node_id <= pe.node_id + pe.descendant_count
               )
         ),
-        -- Selector-list guard (#330): "A, B" parses as ONE `selectors` node whose
-        -- children are the items, separated by `,` tokens. The typed views above
-        -- gather every item's type/class/id into one compound filter, so a list
-        -- asked for nodes matching ALL items and silently returned 0 rows. Until
-        -- lists are supported, raise. A comma inside pseudo-class arguments
-        -- (":not(A, B)") has `arguments` as its parent, not `selectors`, so it is
-        -- not caught here. Each typed view references `sel` once (planner-bug
-        -- workaround, see the typed views at the top).
+        -- Selector lists (#330). "A, B" parses as ONE `selectors` node whose
+        -- children are the items, separated by `,` tokens; a single selector has
+        -- no `selectors` node at all, so none of this applies to it. The typed
+        -- views and the simple_* filters above gather every item into one
+        -- compound filter, which is why a list used to ask for nodes matching ALL
+        -- items and silently returned 0 rows.
+        --
+        -- A list is answered by its own matched_base arm (sel_type = 'selectors'),
+        -- one filter row per item, a node matching if ANY item matches. Only
 
 )SQLMACRO"
         R"SQLMACRO(
-        sel_selectors_nodes AS (
-            SELECT node_id FROM sel WHERE type = 'selectors'
+        -- plain type / .class / #id compounds are supported as items; any other
+        -- item raises rather than returning a partial answer. A comma inside
+        -- pseudo-class arguments (":not(A, B)") has `arguments` as its parent, not
+        -- `selectors`, so it is not a list here. `sel_nodes_flat` references `sel`
+        -- once (planner-bug workaround, see the typed views at the top).
+        sel_nodes_flat AS (
+            SELECT node_id, parent_id, type, name, descendant_count FROM sel
         ),
-        sel_commas AS (
-            SELECT node_id, parent_id FROM sel WHERE type = ','
+        list_items AS (
+            SELECT c.node_id AS item_id, c.name AS item_text, c.descendant_count
+            FROM sel_nodes_flat c
+            JOIN sel_nodes_flat s ON c.parent_id = s.node_id AND s.type = 'selectors'
+            WHERE c.type <> ','
+        ),
+        -- Per item, the same three filters a single selector uses: its type
+        -- (tag_name), its #id and its first .class, in node order; plus whether
+        -- the item holds anything else.
+        list_filters AS (
+            SELECT i.item_id, i.item_text,
+                   arg_min(n.name, n.node_id) FILTER (WHERE n.type = 'tag_name') AS type_filter,
+                   arg_min(n.name, n.node_id) FILTER (WHERE n.type = 'id_name') AS name_filter,
+                   arg_min(n.name, n.node_id) FILTER (WHERE n.type = 'class_name') AS class_filter,
+                   bool_or(n.type NOT IN ('tag_name', 'identifier', 'class_selector', 'class_name',
+                                          'id_selector', 'id_name', '.', '#')) AS unsupported
+            FROM list_items i
+            JOIN sel_nodes_flat n
+              ON n.node_id >= i.item_id
+             AND n.node_id <= i.item_id + i.descendant_count
+            GROUP BY i.item_id, i.item_text
         ),
         selector_list_validation AS (
             SELECT CASE
-                WHEN EXISTS (SELECT 1 FROM sel_commas c
-                             JOIN sel_selectors_nodes s ON c.parent_id = s.node_id)
-                THEN error(
-                    'ast_select: selector lists ("A, B") are not supported yet and would '
-                    'match nothing (issue #330). Call ast_select once per selector and '
-                    'combine the results with UNION.'
-                )
+                WHEN EXISTS (SELECT 1 FROM list_filters WHERE unsupported)
+                THEN error(format(
+                    'ast_select: a selector list ("A, B") may only hold type, .class and '
+                    '#id items, and "{}" is not one (issue #330). Run that item in its '
+                    'own ast_select call and combine the results with UNION.',
+                    (SELECT item_text FROM list_filters WHERE unsupported ORDER BY item_id LIMIT 1)))
                 ELSE true
             END AS ok
         ),
@@ -4739,6 +4763,25 @@ CREATE OR REPLACE MACRO ast_select_from(
                    -- a function's declarator): the enclosing construct is matched
                    -- instead, so a class selects each construct once (#139).
                    AND NOT is_constituent(a.flags)))
+
+        UNION ALL
+
+        -- Selector list: "A, B" (#330). A node matches if ANY item's filters
+        -- match it, with the same per-filter rules as the simple arm above. The
+        -- IN semi-join returns each node once however many items it matches, and
+        -- planned ~0.25 s cheaper per call than a correlated EXISTS (measured).
+        SELECT a.*
+        FROM ast a, sel_props sp
+        WHERE sp.validations_ok
+          AND sp.sel_type = 'selectors'
+          AND (a.file_path, a.node_id) IN (
+              SELECT a2.file_path, a2.node_id FROM ast a2, list_filters f
+              WHERE (f.type_filter IS NULL OR a2.type = f.type_filter)
+                AND (f.name_filter IS NULL OR a2.name = f.name_filter)
+                AND (f.class_filter IS NULL
+                     OR (is_semantic_type(a2.semantic_type, UPPER(f.class_filter))
+                         AND NOT is_syntax_only(a2.flags)
+                         AND NOT is_constituent(a2.flags))))
 
         UNION ALL
 
@@ -4867,6 +4910,9 @@ CREATE OR REPLACE MACRO ast_select_from(
               AND d.node_id <= a.node_id + a.descendant_count
               AND (h.has_type IS NULL OR d.type = h.has_type)
               AND (h.has_name IS NULL OR d.name = h.has_name)
+
+)SQLMACRO"
+        R"SQLMACRO(
               -- A .class has-target means a CONSTRUCT, so skip syntax-only tokens
               -- (the `def` keyword shares DEFINITION_FUNCTION) and constituents
               -- (string content, import specifiers) — same as the standalone
@@ -4912,9 +4958,6 @@ CREATE OR REPLACE MACRO ast_select_from(
                                 WHEN '^=' THEN a.name LIKE ac.attr_value_esc || '%' ESCAPE '\'
                                 WHEN '$=' THEN a.name LIKE '%' || ac.attr_value_esc ESCAPE '\'
                                 ELSE a.name = ac.attr_value END
-
-)SQLMACRO"
-        R"SQLMACRO(
             WHEN ac.attr_name = 'type' THEN
                 CASE ac.attr_op WHEN '*=' THEN a.type LIKE '%' || ac.attr_value_esc || '%' ESCAPE '\'
                                 WHEN '^=' THEN a.type LIKE ac.attr_value_esc || '%' ESCAPE '\'
@@ -5086,6 +5129,9 @@ CREATE OR REPLACE MACRO ast_select_from(
             --
             -- SEMANTICS: **direct, name-matched (NOT resolved)** — see 043.
             -- The edge is precise (scope.function, parse-time), the ARGUMENT is not:
+
+)SQLMACRO"
+        R"SQLMACRO(
             -- `:called-by(foo)` means "the immediately enclosing function's `name`
             -- field is the string 'foo'", so every function spelled `foo` anywhere in
             -- the corpus satisfies it. Note the asymmetry with the direct ruling: an
@@ -5126,9 +5172,6 @@ CREATE OR REPLACE MACRO ast_select_from(
             -- NOTE (#184): the argument describes THIS node, so a semantic class
             -- combined with a different-kind argument is a contradiction and correctly
             -- yields 0 -- `.fn:is-scope(.class#Animal)` asks for a node that is both a
-
-)SQLMACRO"
-        R"SQLMACRO(
             -- function and the class Animal. For "functions INSIDE class Animal" use
             -- `.fn:in-scope(.class#Animal)`; to MAP a match to its scope use `::scope`.
             -- Measured anchors on the python fixture:
@@ -5345,6 +5388,9 @@ CREATE OR REPLACE MACRO ast_select_from(
 
 -- =============================================================================
 -- ast_select: convenience wrapper that parses source files and then runs
+
+)SQLMACRO"
+        R"SQLMACRO(
 -- the selector engine. For one-off queries this is the simplest API.
 -- For repeated queries, use ast_select_from with a pre-parsed table.
 -- =============================================================================
@@ -5386,9 +5432,6 @@ CREATE OR REPLACE MACRO ast_select(
     -- ('full', 'smart', 'none', 'none+schema', ...) and is forwarded verbatim,
     -- so an explicit level wins over the auto-materialization: a caller who
     -- passes peek := 'none+schema' and also filters on [peek...] gets the
-
-)SQLMACRO"
-        R"SQLMACRO(
     -- peek_filter_validation error with its re-parse hint, rather than having
     -- the argument silently overridden. Explicit beats implicit. The default,
     -- NULL, means "decide exactly as before", so no existing caller moves.
