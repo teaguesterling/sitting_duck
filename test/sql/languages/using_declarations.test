@@ -1,0 +1,86 @@
+# name: test/sql/languages/using_declarations.test
+# description: `using` declarations are declarations in .js, .ts and .tsx alike (tracker/bugs/063)
+# group: [languages]
+
+require sitting_duck
+
+# WHY THIS FILE EXISTS
+#
+# tree-sitter-javascript gained a first-class `using_declaration` for Explicit
+# Resource Management. The tree-sitter-typescript overlay, pinned to an upstream
+# that predates it, spelled the same construct as an assignment expression
+# carrying a stray `using` token. Both spellings then lived in one grammar and
+# the parser generator refused to build either dialect -- which is how the
+# divergence was found, eleven weeks after the javascript pin moved.
+#
+# NEITHER SPELLING ERRORED, so a parse-error test could never have caught this.
+# The only visible difference was semantic: the declared name was a definition
+# in `.js` and was not in `.ts`.
+#
+#   before, 'javascript'  program > using_declaration > using > variable_declarator > identifier > = > call_expression
+#   before, 'typescript'  program > expression_statement > assignment_expression > using > identifier > = > call_expression
+#
+# patches/fix-typescript-using-conflict.patch drops the overlay's rule, so all
+# three languages now produce the javascript shape.
+
+# The node type reaches all three languages.
+query III
+SELECT
+  (SELECT count(*) FROM parse_ast('using f = open();', 'javascript') WHERE type = 'using_declaration'),
+  (SELECT count(*) FROM parse_ast('using f = open();', 'typescript') WHERE type = 'using_declaration'),
+  (SELECT count(*) FROM parse_ast('using f = open();', 'tsx')        WHERE type = 'using_declaration');
+----
+1	1	1
+
+# THE ASSERTION THAT MATTERS. The type existing proves only that the grammar
+# moved; what broke was that the declared name was not a definition, so a query
+# for definitions found `f` in a .js file and silently missed it in a .ts file.
+query TTTT
+SELECT language, name, semantic_type_to_string(semantic_type), is_definition(semantic_type)
+FROM (
+    SELECT * FROM parse_ast('using f = open();', 'javascript')
+    UNION ALL SELECT * FROM parse_ast('using f = open();', 'typescript')
+    UNION ALL SELECT * FROM parse_ast('using f = open();', 'tsx')
+) WHERE type = 'using_declaration' ORDER BY language;
+----
+javascript	f	DEFINITION_VARIABLE	true
+tsx	f	DEFINITION_VARIABLE	true
+typescript	f	DEFINITION_VARIABLE	true
+
+# `await using`, the async form, which javascript declares as the same node.
+query III
+SELECT
+  (SELECT count(*) FROM parse_ast('async function m(){ await using f = open(); }', 'javascript') WHERE type = 'using_declaration'),
+  (SELECT count(*) FROM parse_ast('async function m(){ await using f = open(); }', 'typescript') WHERE type = 'using_declaration'),
+  (SELECT count(*) FROM parse_ast('async function m(){ await using f = open(); }', 'tsx')        WHERE type = 'using_declaration');
+----
+1	1	1
+
+# No ERROR nodes anywhere: the construct always parsed, only its shape moved.
+query III
+SELECT
+  (SELECT count(*) FROM parse_ast('using f = open();', 'javascript') WHERE type = 'ERROR'),
+  (SELECT count(*) FROM parse_ast('using f = open();', 'typescript') WHERE type = 'ERROR'),
+  (SELECT count(*) FROM parse_ast('using f = open();', 'tsx')        WHERE type = 'ERROR');
+----
+0	0	0
+
+# CONTROL 1: the dialects must still disagree where they genuinely differ. This
+# file would pass just as well if tsx had quietly become typescript, or if the
+# typescript grammar had been replaced by the javascript one.
+query II
+SELECT
+  (SELECT count(*) FROM parse_ast('const n = <number>raw;', 'typescript') WHERE type = 'type_assertion'),
+  (SELECT count(*) FROM parse_ast('const a = <div/>;', 'tsx') WHERE type = 'jsx_self_closing_element');
+----
+1	1
+
+# CONTROL 2: cpp declares the SAME raw_type for an unrelated construct
+# (`using std::vector;`) and must keep its own meaning. One node-type string,
+# two languages, two constructs -- which is why these tables are per language,
+# and the trap for anyone tempted to unify the declaration.
+query TT
+SELECT name, semantic_type_to_string(semantic_type)
+FROM parse_ast('using std::vector;', 'cpp') WHERE type = 'using_declaration';
+----
+std::vector	EXTERNAL_IMPORT
