@@ -10,12 +10,16 @@
 >
 > Three statements below are now false, left in place as the pre-v2 record:
 >
-> - "27 language support" — it is **28**, measured from
->   `cmake/BuiltinLanguages.cmake` (28 `sitting_duck_language(...)` declarations).
+> - "27 language support" — it is **29**, measured 2026-11-13 from
+>   `cmake/BuiltinLanguages.cmake` (29 `sitting_duck_language(...)` declarations)
+>   and from `ast_supported_languages()` (29 rows: 28 tree-sitter + the native
+>   `duckdb` adapter). This bullet said **28** until #329 added `tsx`.
 > - "**YAML is not supported**" — it is, since
 >   `cmake/BuiltinLanguages.cmake:132` (tree-sitter ABI 13).
-> - "106 test files, 6049 assertions" — CI's grammar job now reports
->   `9340 assertions in 167 test cases`.
+> - "106 test files, 6049 assertions" — CI's grammar job reported
+>   `9340 assertions in 167 test cases` when this note was written and
+>   `10663 assertions in 197 test cases` on 2026-11-13. Treat any assertion
+>   count in this file as a date stamp rather than a figure.
 
 ## Priority Levels
 

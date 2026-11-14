@@ -120,7 +120,7 @@ Every AST node has a `semantic_type` (UTINYINT) providing cross-language meaning
 
 ### Semantic Predicate Macros
 
-These are the primary way to filter nodes. They work identically across all 27 languages.
+These are the primary way to filter nodes. They work identically across all 29 languages.
 
 **Definitions:**
 | Macro | Matches |
@@ -514,7 +514,7 @@ Returns: `file_path`, `name`, `definition_kind`, `start_line`, `end_line`, `sour
 
 ---
 
-## Supported Languages (27)
+## Supported Languages (29)
 
 | Category | Languages |
 |----------|-----------|
@@ -524,7 +524,7 @@ Returns: `file_path`, `name`, `definition_kind`, `start_line`, `end_line`, `sour
 | **Enterprise** | Java (.java), C# (.cs), Kotlin (.kt, .kts), Swift (.swift) |
 | **Mobile** | Dart (.dart) |
 | **Infrastructure** | HCL/Terraform (.hcl, .tf, .tfvars), JSON (.json), TOML (.toml), GraphQL (.graphql, .gql), YAML (.yaml, .yml) |
-| **Documentation** | SQL (.sql), Markdown (.md, .markdown) |
+| **Documentation** | SQL (.sql), DuckDB (no file extension; the database's own parser), Markdown (.md, .markdown) |
 
 Languages are auto-detected from file extensions. Override with `read_ast('file', 'language')`.
 

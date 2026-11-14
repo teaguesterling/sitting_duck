@@ -1,6 +1,6 @@
 # Sitting Duck
 
-**Query source code with SQL.** CSS selectors, pattern matching, scope-aware call graphs — across 28 languages.
+**Query source code with SQL.** CSS selectors, pattern matching, scope-aware call graphs — across 29 languages.
 
 ```sql
 -- Functions that call execute() but have no error handling
@@ -30,7 +30,7 @@ SELECT name FROM ast_select('src/**/*.py',
 SELECT name FROM ast_select('src/**/*.py', '.func#validate::callers');
 ```
 
-~80 semantic aliases (`.func`, `.class`, `.call`, `.loop`, `.if`, `.namespace`, ...) work identically across all 28 languages. [Full selector reference →](reference/css-selectors.md)
+~80 semantic aliases (`.func`, `.class`, `.call`, `.loop`, `.if`, `.namespace`, ...) work identically across all 29 languages. [Full selector reference →](reference/css-selectors.md)
 
 ### Pattern matching by example
 
@@ -81,7 +81,7 @@ WHERE caller = 'main';
 
 ### Cross-language semantic types
 
-The same query works on Python, JavaScript, Rust, Go, C++, and 22 more languages:
+The same query works on Python, JavaScript, Rust, Go, C++, and 24 more languages:
 
 ```sql
 SELECT language, COUNT(*) AS functions
@@ -122,16 +122,16 @@ SELECT * FROM ast_select_from('ast', '.func:has(return_statement)');
 SELECT * FROM ast_select_from('ast', '.class:named');
 ```
 
-## 28 Languages
+## 29 Languages
 
 | Category | Languages |
 |----------|-----------|
-| **Web** | JavaScript, TypeScript, HTML, CSS |
+| **Web** | JavaScript, TypeScript, TSX, HTML, CSS |
 | **Systems** | C, C++, Go, Rust, Zig |
 | **Scripting** | Python, Ruby, PHP, Lua, R, Bash |
 | **Enterprise** | Java, C#, Kotlin, Swift, Dart |
 | **Data** | SQL, DuckDB, GraphQL, JSON |
-| **Config** | HCL (Terraform), TOML |
+| **Config** | HCL (Terraform), TOML, YAML |
 | **Docs** | Markdown |
 
 ## Documentation
