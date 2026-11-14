@@ -48,9 +48,23 @@
 #
 # SIDE EFFECTS
 # ------------
-# Generation writes into the grammar submodules. Each is restored to its pin
-# afterwards, so a clean tree stays clean; `--keep` skips the restore when you
-# want to inspect the output.
+# Generation writes into the grammar submodules. The restore puts each one back
+# exactly as this script found it -- tracked content via `git checkout`, and any
+# file that APPEARED while we ran, by comparing git's untracked list before and
+# after. `--keep` skips the restore when you want to inspect the output.
+#
+# The before/after comparison is the point, rather than deleting by pattern. Two
+# different kinds of leftover showed up on 2026-11-14, and a rule written for
+# either one alone misses the other:
+#
+#   * `patch` leaves `*.orig` beside every file it edits -- 4 submodules;
+#   * regeneration CREATES files the grammar's own repo never tracked, so
+#     `git checkout` cannot remove them: tree-sitter-graphql gained
+#     src/tree_sitter/{alloc,array}.h, because that grammar predates the CLI
+#     shipping those headers.
+#
+# Removing only what appeared also means a developer's own untracked files in a
+# submodule survive, which a blanket `git clean -fd` would not.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -145,6 +159,8 @@ while IFS=: read -r lang rel; do
   fi
 
   st="$(mktemp -d)"
+  untracked_before="$(mktemp)"
+  git -C "$sub" ls-files --others --exclude-standard >"$untracked_before" 2>/dev/null
   [ -n "${PATCH_NAME[$lang]:-}" ] && bash scripts/apply_grammar_patches.sh "${PATCH_NAME[$lang]}" "$ROOT" "$ROOT/patches" "$st" >/dev/null 2>&1
   out="$( cd "grammars/$rel" && timeout 600 "$CLI" generate 2>&1 )"; rc=$?
   rm -rf "$st"
@@ -173,7 +189,15 @@ while IFS=: read -r lang rel; do
       fail=$((fail+1))
     fi
   fi
-  [ "$KEEP" -eq 1 ] || git -C "$sub" checkout -- . >/dev/null 2>&1
+  if [ "$KEEP" -ne 1 ]; then
+    git -C "$sub" checkout -- . >/dev/null 2>&1
+    # Remove only what appeared while we ran. Anything untracked that was
+    # already there before is somebody else's and stays.
+    git -C "$sub" ls-files --others --exclude-standard 2>/dev/null \
+      | grep -Fxv -f "$untracked_before" 2>/dev/null \
+      | while IFS= read -r appeared; do rm -f "$sub/$appeared"; done
+  fi
+  rm -f "$untracked_before"
 done < generated_parsers/MANIFEST
 
 echo
