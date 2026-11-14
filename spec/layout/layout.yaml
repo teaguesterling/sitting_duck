@@ -146,9 +146,31 @@ exceptions:
     grammar: "c-sharp"  # grammars/tree-sitter-c-sharp, not -csharp
     reason: "upstream grammar repository name differs from the registered name"
   tsx:
-    definitions: none   # TSXAdapter inherits TypeScriptAdapter's table
+    definitions: none   # no tsx_types.def of its own
+    # ...because TSXAdapter inherits TypeScriptAdapter's table, literally the
+    # same static map. `definitions: none` says "no file named for this
+    # language"; this says WHERE the table actually is, which is a different
+    # fact and the one every source scan needs.
+    #
+    # Tools attribute a DEF_TYPE row to a language by its FILE'S BASENAME, so
+    # without this line tsx reads as a language with no declarations at all.
+    # Measured 2026-11-13: conformance_kit.sh reported tsx UNDECL on NATIVE-ABST
+    # and DECL-UNIQUE ("no .def reachable for this language"), which is a gate
+    # that passes because it did not look.
+    definitions_from: typescript
     grammar: "typescript"  # tree-sitter-typescript ships the tsx grammar beside typescript
     reason: "TypeScript with JSX: typescript's adapter and declarations, the tsx grammar"
+  yaml:
+    regenerates: false
+    reason: >-
+      Its grammar.js post-processes the output of grammar() --
+      `module.exports = global_alias(global_alias(module.exports, {...}))` --
+      which reads grammar_json.rules as undefined and throws under this tree's
+      tree-sitter CLI and Node. So scripts/generate_all_parsers.sh cannot list
+      it and generated_parsers/tree-sitter-yaml/ holds the parser the grammar
+      shipped (ABI 13, C++ scanner). See #233. This is the ONLY language whose
+      committed parser is not reproducible from its pin: measured 2026-11-13,
+      the other 27 regenerate byte-identically.
 
 # Declaration tables that belong to no registered language. These are the
 # condition yaml was in before #227 wired it up: a .def with no adapter.

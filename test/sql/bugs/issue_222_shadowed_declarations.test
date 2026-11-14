@@ -155,8 +155,26 @@ SELECT (SELECT count(*) FROM ast_type_map('javascript')
 # are deletable, not 14. Symmetrically, 26 typescript raw_types are absent from
 # typescript's table and 2 (`field_definition`, `html_character_reference`) are
 # reachable in javascript, so 24 are deletable. 9 + 5 = 14 and 24 + 2 = 26.
+#
+# tracker/bugs/063 moved them once more, and UPWARDS for the first time in this
+# ledger: javascript 201 -> 202, typescript 293 -> 294, both +1 and both from
+# the single `using_declaration` entry added to javascript_types.def. The
+# typescript delta is the sibling rule working in the additive direction -- one
+# line in javascript's file, two languages changed, because
+# typescript_types.def #includes it.
 query II
 SELECT (SELECT count(*) FROM ast_type_map('javascript')) AS js,
        (SELECT count(*) FROM ast_type_map('typescript')) AS ts;
 ----
-201	293
+202	294
+
+# And the same +1 reaches tsx, which has no table of its own at all: TSXAdapter
+# inherits TypeScriptAdapter's. Pinned here because this file is where the
+# sibling rule is checked, and tsx is a THIRD consumer of javascript's file --
+# via typescript's #include, one level further than #232 had to consider.
+query III
+SELECT (SELECT count(*) FROM ast_type_map('tsx')) AS tsx,
+       (SELECT count(*) FROM ast_type_map('tsx')) = (SELECT count(*) FROM ast_type_map('typescript')) AS matches_typescript,
+       (SELECT count(*) FROM ast_type_map('tsx') WHERE node_type = 'using_declaration') AS has_using_declaration;
+----
+294	true	1

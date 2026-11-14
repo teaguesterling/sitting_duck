@@ -472,6 +472,53 @@ for pattern in "${def_sources[@]}"; do
     done
 done
 
+# ---- 2a2. INHERITED TABLES -------------------------------------------------
+# The scan above attributes every DEF_TYPE row to a language by its FILE'S
+# BASENAME. A language that has no file of its own because it SHARES another
+# language's table is therefore invisible to it, and the checks gated on
+# `def_seen` report UNDECL -- a pass that happens not to have looked.
+#
+# tsx is that case: TSXAdapter inherits TypeScriptAdapter's table, literally the
+# same static map, and there is no tsx_types.def. Measured 2026-11-13, before
+# this block: tsx came back UNDECL on NATIVE-ABST and DECL-UNIQUE.
+#
+# spec/layout/layout.yaml records the relation as `definitions_from`, so the set
+# is declared rather than guessed here. The rows are COPIED under the inheriting
+# language's name, which is what the adapter does at compile time, and the
+# checks then run against tsx's own runtime -- a different grammar over the same
+# declarations, so this adds coverage rather than duplicating typescript's.
+if command -v python3 >/dev/null 2>&1; then
+    while IFS='|' read -r heir source; do
+        [ -z "${heir}" ] && continue
+        # Via a temp file, NOT appending to the file awk is reading: awk reads
+        # through a buffered stream, so appending in place can make it read its
+        # own output.
+        inherited_tmp="$(mktemp)"
+        awk -F'\t' -v s="${source}" -v h="${heir}" 'BEGIN{OFS="\t"} $1==s { $1=h; print }' \
+            "${def_table}" >"${inherited_tmp}"
+        copied=$(wc -l <"${inherited_tmp}" | tr -d ' ')
+        cat "${inherited_tmp}" >>"${def_table}"
+        rm -f "${inherited_tmp}"
+        if [ "${copied}" -eq 0 ]; then
+            echo "conformance_kit: spec says ${heir} inherits ${source}'s table, but the scan found 0 rows for ${source}" >&2
+            exit "${EXIT_USAGE}"
+        fi
+        say "inherited: ${heir} reads ${source}'s declaration table (${copied} rows, spec: definitions_from)"
+    done < <(python3 - "${repo_root}" <<'PY'
+import pathlib, sys
+try:
+    import yaml
+except ImportError:
+    sys.exit(0)
+spec = yaml.safe_load((pathlib.Path(sys.argv[1]) / "spec/layout/layout.yaml").read_text())
+for lang, exc in sorted((spec.get("exceptions") or {}).items()):
+    src = (exc or {}).get("definitions_from")
+    if src:
+        print(f"{lang}|{src}")
+PY
+    )
+fi
+
 def_rows=$(wc -l <"${def_table}" | tr -d ' ')
 
 # Which languages the def scan could speak for at all, and whether each

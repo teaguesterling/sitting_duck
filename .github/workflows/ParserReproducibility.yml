@@ -1,0 +1,63 @@
+# Is generated_parsers/ still the parsers the grammar pins produce?
+#
+# NOT in MainDistributionPipeline.yml on purpose. This job builds the
+# tree-sitter CLI from source and regenerates 27 grammars -- about 25 minutes
+# measured on a 4-core box -- so it runs on dispatch and on a schedule, never on
+# a push. The cheap half of the same contract runs on every PR, in the
+# `layout and registration order` job: that one checks that a module's PARSERS
+# path resolves inside generated_parsers/ and that every tree-sitter language
+# has a MANIFEST line, which is static and costs nothing.
+#
+# WHY IT EXISTS: generated_parsers/ is the build's only parser source and the
+# grammar submodules are not needed to build, which is deliberate and is proved
+# by the `Runtime grammar registration tests` job. The cost is that a committed
+# parser can quietly stop corresponding to its pin. That already happened once:
+# the javascript pin moved 2026-08-31, the typescript overlay did not, neither
+# dialect could be generated from that day on, and `.ts` and `.js` silently
+# disagreed about whether `using f = open()` declares anything until an
+# unrelated PR tripped over it eleven weeks later. tracker/bugs/063.
+name: Parser reproducibility
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Mondays 05:00 UTC. A grammar pin moves rarely, and the failure it catches
+    # is latent rather than urgent -- it has to be noticed, not noticed fast.
+    - cron: '0 5 * * 1'
+
+concurrency:
+  group: parser-reproducibility-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  reproducibility:
+    name: committed parsers match their pins
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # ALL submodules, unlike every other job here: this is the one check
+          # whose whole subject is the grammar submodules.
+          submodules: recursive
+
+      - name: Ensure PyYAML is available
+        # The exemption list is read from spec/layout/layout.yaml.
+        run: python3 -c "import yaml" || python3 -m pip install --break-system-packages pyyaml
+
+      - uses: actions/setup-node@v4
+        with:
+          # grammar.js files are evaluated by node during generation.
+          node-version: '18'
+
+      - name: Build the tree-sitter CLI from the pinned submodule
+        # Pinned, not installed from npm or crates.io: the committed parsers were
+        # produced by THIS CLI, and a different version generates different bytes,
+        # which would make every row of this check fail for the wrong reason.
+        run: cargo build --release --bin tree-sitter --manifest-path third_party/tree-sitter/Cargo.toml
+
+      - name: Prove the check can fail
+        run: ./scripts/verify_parser_reproducibility.sh --self-test
+
+      - name: Every committed parser is byte-identical to a regeneration from its pin
+        run: ./scripts/verify_parser_reproducibility.sh

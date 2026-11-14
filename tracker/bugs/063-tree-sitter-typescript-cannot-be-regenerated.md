@@ -1,87 +1,112 @@
-# 063 — `tree-sitter generate` fails for BOTH dialects of `tree-sitter-typescript`, so `generated_parsers/` cannot be rebuilt for typescript or tsx
+# 063 — `tree-sitter generate` failed for BOTH dialects of `tree-sitter-typescript`, because the javascript pin moved and the overlay did not
 
-**Status:** Not fixed. Measured 2026-11-13. Recorded as a KNOWN LIMITATION of
-the parser-generation path, not a user-facing defect: the committed parsers in
-`generated_parsers/` are what every build compiles, and they work. What is
-broken is the ability to REPRODUCE them.
+**Status:** FIXED on `feat/grammar-ts-using-conflict` by
+`patches/fix-typescript-using-conflict.patch`. Both dialects regenerate, and
+`generated_parsers/tree-sitter-typescript/{typescript,tsx}` now hold 0.26.0
+output like every other language.
 **Found by:** reviewing PR #329 (the tsx language). The PR compiled tsx's parser
-straight out of the `grammars/` submodule, which broke the submodule-free build
-contract. Moving it into `generated_parsers/` the house way meant regenerating
-it, and the regeneration does not run.
-**Related:** `#233` is the same shape for yaml, whose grammar.js throws under
-tree-sitter 0.26 / Node 18 and whose committed parser is therefore ABI 13. This
-is the second grammar family in that state, and the first one that holds a
-dialect the project added itself.
+straight out of the `grammars/` submodule. Moving it into `generated_parsers/`
+the house way meant regenerating it, and the regeneration did not run.
+**Related:** `#233` is a DIFFERENT cannot-regenerate state, for yaml, whose
+`grammar.js` post-processes `grammar()`'s output and throws under this CLI. That
+one is still open. This one looked like it and was not.
 
-## What is wrong
+## What was wrong
 
-Both dialects fail, identically:
+Both dialects failed identically:
 
-    $ cd grammars/tree-sitter-typescript/tsx
+    $ cd grammars/tree-sitter-typescript/tsx       # and .../typescript
     $ ../../../third_party/tree-sitter/target/release/tree-sitter generate
     Error when generating parser
     Caused by:
         Unresolved conflict for symbol sequence:
           'using'  identifier  •  '!'  …
-        Possible interpretations:
-          1:  'using'  (primary_expression  identifier)  •  '!'  …
-          2:  'using'  (variable_declarator  identifier  •  '!'  type_annotation)
-              (precedence: 'declaration')
 
-`grammars/tree-sitter-typescript/typescript` gives the same error, with the
-same two interpretations. The patch `patches/fix-typescript-grammar-require.patch`
-was applied first (it edits `common/define-grammar.js`, which both dialects
-`require`), so this is not the require-path failure that patch exists for.
+**The toolchain was not at fault, and neither was tsx.** The CLI binary was
+built 2026-08-31 19:26 from the pin that is still checked out (`eaa10b27`,
+version 0.26.0, clean `git submodule status`), node is v18.19.1, and the
+typescript grammar pin had not moved since 2025-06-09.
 
-`using` declarations come from tree-sitter-javascript's grammar, which both
-dialects extend, so the conflict is in shared rules rather than in either
-dialect's overlay.
+What moved was the grammar underneath it. `grammars/tree-sitter-javascript` was
+bumped on **2026-08-31** to a 2025-09-01 upstream that added a first-class
+Explicit Resource Management rule:
 
-## Why the committed parsers still work
+    grammars/tree-sitter-javascript/grammar.js:335
+        using_declaration: $ => seq('using', ...)
 
-    generated_parsers/tree-sitter-typescript/typescript/src/parser.c  LANGUAGE_VERSION 15  STATE_COUNT 5870
-    grammars/tree-sitter-typescript/typescript/src/parser.c           LANGUAGE_VERSION 14  STATE_COUNT 5870
-    generated_parsers/tree-sitter-typescript/tsx/src/parser.c         LANGUAGE_VERSION 14  STATE_COUNT 5986
+The typescript overlay is pinned to 2025-01-30 and approximated the same
+construct its own older way, from before javascript had the rule:
 
-`generated_parsers/MANIFEST` says it was built on 2026-08-31 with tree-sitter
-0.26.0. The same CLI refuses the same grammar today. Neither submodule pin has
-moved since: `grammars/tree-sitter-typescript` was pinned on 2025-06-09 (upstream
-`75b3874`, 2025-01-30) and `third_party/tree-sitter` on 2025-06-17. The two
-parsers have the SAME `STATE_COUNT`, so the grammar itself did not change
-between the regeneration and the committed upstream file.
+    grammars/tree-sitter-typescript/common/define-grammar.js:199
+        assignment_expression: $ => prec.right('assign', seq(
+            optional('using'), ...
 
-**The cause is therefore not established.** The candidates not ruled out: the
-CLI binary in `third_party/tree-sitter/target/release/` was built from a
-checkout other than the pin, or the Node version that evaluates `grammar.js`
-differs from the one used on 2026-08-31. Settling it needs the 2026-08-31
-toolchain, which is not recorded anywhere.
+TypeScript also allows `!` (definite assignment) on a `variable_declarator`, so
+`using x!` had two parses and the generator refused.
 
-## Who this hurts
+**There was nothing to bump to.** `75b3874` IS upstream HEAD for
+tree-sitter-typescript: its last commit is 2025-01-30, its last release 0.23.2
+(2024-11-11), and upstream's own overlay still reads `optional('using')`. The
+grammar is unmaintained while its dependency moved on.
 
-Nobody at runtime. It hurts the next person who needs to change these grammars:
+## Why a `conflicts:` entry was the wrong fix
 
-  - `scripts/generate_all_parsers.sh` fails at its `typescript` entry.
-  - `make generate-parsers` (the `USE_PREGENERATED_PARSERS=OFF` path) fails the
-    same way, and `typescript` is generated before every independent grammar, so
-    an unpregenerated build stops there.
-  - tsx cannot be given a 0.26.0 parser, which is why
-    `generated_parsers/tree-sitter-typescript/tsx/` holds ABI 14 beside 28
-    languages at ABI 15.
+The first attempt added the entry the CLI itself suggests, which the overlay's
+`conflicts: ($, previous) => previous.concat([...])` accepts cleanly:
 
-## What was done instead
+    [$.variable_declarator, $.primary_expression]
 
-`generated_parsers/tree-sitter-typescript/tsx/src/{parser.c,scanner.c}` are
-byte-identical copies of the submodule's own files — the exact bytes the build
-compiled while `languages/tsx/module.cmake` reached into `grammars/`. So moving
-them changes where the build reads from and nothing about the binary.
+It resolved that conflict and exposed the next one:
 
-## What would fix it
+    'using'  identifier  '='  expression  •  ','
+      1:  'using' identifier (_initializer '=' expression)
+      2:  (assignment_expression 'using' identifier '=' expression)
 
-1. Record the toolchain that produced `generated_parsers/` (a CLI version line
-   in the MANIFEST is there, a Node version is not, and the CLI's provenance is
-   not), so this question is answerable next time.
-2. Then either bump `tree-sitter-typescript` to a pin whose grammar generates,
-   or add the `conflicts:` entry the CLI asks for, as a patch in `patches/`.
+Those are not two ambiguities. They are one construct with two spellings inside
+one grammar, so conflicts entries multiply without end.
 
-Both change the shipped typescript parser, so both need their own before/after
-on the typescript suite. Neither belongs in a build-contract fix.
+## The fix
+
+Delete the overlay's `optional('using')`. It exists only because javascript had
+none of its own when it was written; javascript's `using_declaration`
+supersedes it.
+
+    typescript   ABI 15 -> 15,  STATE_COUNT 5870 -> 5834,  symbols 359 -> 360
+    tsx          ABI 14 -> 15,  STATE_COUNT 5986 -> 5897,  symbols 372 -> 373
+    added: using_declaration (both)        removed: nothing (both)
+
+No declaration was orphaned, which is the measurement that made this safe to
+take.
+
+## What it changes for users
+
+`.ts` and `.tsx` stop disagreeing with `.js` about what a `using` declaration
+is. Measured on `using f = open();`:
+
+    before, 'javascript'   program > using_declaration > using > variable_declarator > identifier > = > call_expression
+    before, 'typescript'   program > expression_statement > assignment_expression > using > identifier > = > call_expression
+    after,  all three      the javascript shape
+
+Neither parse errored, so nothing signalled the divergence. The consequence was
+that `f` was a `DEFINITION_VARIABLE` in `.js` and merely a `NAME_IDENTIFIER` in
+`.ts` — `is_definition` false — so a query for definitions found it in one file
+type and silently missed it in the other.
+
+`using_declaration` was undeclared for javascript too, so it carried
+`PARSER_CONSTRUCT` and no name even there. It is now declared in
+`javascript_types.def` beside `lexical_declaration`, which it is a kind of.
+
+## What this says about the pins
+
+The two grammar families with a declared dependency both have the dependency
+bumped ahead of the dependent:
+
+    javascript  2026-08-31  ->  typescript/tsx  2025-06-09   (this bug)
+    c           2026-08-31  ->  cpp             2025-05-26   (measured clean)
+
+cpp regenerates byte-identically, so the skew is not automatically a defect —
+but nothing checks it either. Measured 2026-11-13: **25 of 28 committed parsers
+are byte-identical to a fresh regeneration from their own pin**. The exceptions
+were typescript and tsx (this bug, now fixed) and yaml (#233). A gate over that
+property would have caught this on the day the javascript pin moved, rather
+than eleven weeks later through an unrelated PR.

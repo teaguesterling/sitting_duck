@@ -68,7 +68,7 @@ ORDER BY COUNT(*) DESC;
 
 Sitting Duck transforms your source code into queriable data structures:
 
-1. **Tree-sitter parsing** - Robust, error-recovering parsers for 27 languages, plus the native `duckdb` adapter which wraps DuckDB's own SQL parser (28 in total)
+1. **Tree-sitter parsing** - Robust, error-recovering parsers for 28 languages, plus the native `duckdb` adapter which wraps DuckDB's own SQL parser (29 in total)
 2. **Native semantic extraction** - Language-specific semantic analysis with type information
 3. **Multiple context levels** - From basic parsing to full semantic understanding
 4. **SQL interface** - Rich table functions with DuckDB-consistent design
@@ -77,18 +77,18 @@ Sitting Duck transforms your source code into queriable data structures:
 
 ## Supported Languages
 
-Currently supports **28 languages**, all with universal semantic type classification: **26 via vendored Tree-sitter grammars**, plus the native **`duckdb`** adapter, which has no Tree-sitter grammar and wraps DuckDB's own SQL parser instead. (`sql` and `duckdb` are two different languages here — `sql` is the Tree-sitter grammar, `duckdb` is the database's own parser.) Native extraction depth (names, signatures, parameters, modifiers) varies by language — see the per-language docs below for quality ratings.
+Currently supports **29 languages**, all with universal semantic type classification: **28 via vendored Tree-sitter grammars**, plus the native **`duckdb`** adapter, which has no Tree-sitter grammar and wraps DuckDB's own SQL parser instead. (`sql` and `duckdb` are two different languages here — `sql` is the Tree-sitter grammar, `duckdb` is the database's own parser.) Native extraction depth (names, signatures, parameters, modifiers) varies by language — see the per-language docs below for quality ratings.
 
 The built-in set is declared in `cmake/BuiltinLanguages.cmake`; `SELECT language FROM ast_supported_languages()` reports what your build actually has.
 
 | Category | Languages |
 |----------|-----------|
-| **Web** | JavaScript, TypeScript, HTML, CSS |
+| **Web** | JavaScript, TypeScript, TSX, HTML, CSS |
 | **Systems** | C, C++, Go, Rust, Zig |
 | **Scripting** | Python, Ruby, PHP, Lua, R, Bash |
 | **Enterprise** | Java, C#, Kotlin, Swift, Dart |
 | **Data/Query** | SQL, DuckDB, GraphQL, JSON |
-| **Config** | HCL (Terraform), TOML |
+| **Config** | HCL (Terraform), TOML, YAML |
 | **Docs** | Markdown |
 
 All languages include semantic type extraction with refinements (Function::LAMBDA, Variable::MUTABLE, etc.).

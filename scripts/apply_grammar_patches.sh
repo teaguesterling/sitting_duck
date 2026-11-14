@@ -58,9 +58,10 @@ case "$GRAMMAR_NAME" in
         apply_patch "fix-cpp-grammar-require"
         ;;
     "typescript"|"tsx")
-        # One patch for both dialects: it edits common/define-grammar.js, which
-        # typescript/grammar.js and tsx/grammar.js both require.
+        # Both patches edit common/define-grammar.js, which typescript/grammar.js
+        # and tsx/grammar.js both require, so both dialects need both.
         apply_patch "fix-typescript-grammar-require"
+        apply_patch "fix-typescript-using-conflict"
         ;;
     "tree-sitter-rust")
         apply_patch "fix-rust-grammar-regex"
