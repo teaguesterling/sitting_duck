@@ -1725,6 +1725,32 @@ CREATE OR REPLACE MACRO ast_select_from(
                     AND n.node_id <= pe.node_id + pe.descendant_count
               )
         ),
+        -- Selector-list guard (#330): "A, B" parses as ONE `selectors` node whose
+        -- children are the items, separated by `,` tokens. The typed views above
+        -- gather every item's type/class/id into one compound filter, so a list
+        -- asked for nodes matching ALL items and silently returned 0 rows. Until
+        -- lists are supported, raise. A comma inside pseudo-class arguments
+        -- (":not(A, B)") has `arguments` as its parent, not `selectors`, so it is
+        -- not caught here. Each typed view references `sel` once (planner-bug
+        -- workaround, see the typed views at the top).
+        sel_selectors_nodes AS (
+            SELECT node_id FROM sel WHERE type = 'selectors'
+        ),
+        sel_commas AS (
+            SELECT node_id, parent_id FROM sel WHERE type = ','
+        ),
+        selector_list_validation AS (
+            SELECT CASE
+                WHEN EXISTS (SELECT 1 FROM sel_commas c
+                             JOIN sel_selectors_nodes s ON c.parent_id = s.node_id)
+                THEN error(
+                    'ast_select: selector lists ("A, B") are not supported yet and would '
+                    'match nothing (issue #330). Call ast_select once per selector and '
+                    'combine the results with UNION.'
+                )
+                ELSE true
+            END AS ok
+        ),
         parse_completeness_validation AS (
             SELECT CASE
                 WHEN EXISTS (SELECT 1 FROM sel_uncovered)
@@ -1774,6 +1800,7 @@ CREATE OR REPLACE MACRO ast_select_from(
                  AND (SELECT ok FROM pseudo_element_validation)
                  AND (SELECT ok FROM has_args_validation)
                  AND (SELECT ok FROM combinator_validation)
+                 AND (SELECT ok FROM selector_list_validation)
                  AND (SELECT ok FROM parse_completeness_validation)) as validations_ok
         ),
 

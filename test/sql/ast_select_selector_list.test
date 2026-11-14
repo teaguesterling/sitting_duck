@@ -1,0 +1,68 @@
+# name: test/sql/ast_select_selector_list.test
+# group: [sql]
+
+# Issue #330: a top-level selector list ("A, B") is well-formed CSS, but
+# ast_select matched it as one compound selector and silently returned 0 rows.
+# Until lists are supported, a list must raise and name the workaround, so a
+# caller never reads "no match" from a query that was not answered (#89).
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# Each item alone matches: the fixture has the definitions the list asks for.
+query I
+SELECT count(*) FROM ast_select('test/data/python/qualified_names.py', '.func');
+----
+6
+
+# --- A top-level list raises, with and without spaces, any number of items ---
+
+statement error
+SELECT * FROM ast_select('test/data/python/qualified_names.py', '.func, .class');
+----
+selector lists
+
+statement error
+SELECT * FROM ast_select('test/data/python/qualified_names.py', '.func,.class');
+----
+selector lists
+
+statement error
+SELECT * FROM ast_select('test/data/python/qualified_names.py', '.func, .class, .call');
+----
+selector lists
+
+# The message names the issue and the workaround.
+statement error
+SELECT * FROM ast_select('test/data/python/qualified_names.py', '.func#a, .func#b');
+----
+issue #330
+
+statement error
+SELECT * FROM ast_select('test/data/python/qualified_names.py', '.func#a, .func#b');
+----
+UNION
+
+# ast_select_from takes the same path.
+statement ok
+CREATE TABLE qn AS SELECT * FROM read_ast('test/data/python/qualified_names.py');
+
+statement error
+SELECT * FROM ast_select_from('qn', '.func, .class');
+----
+selector lists
+
+# --- Not a top-level list: these must keep working ---
+
+# A comma inside pseudo-class arguments is not a top-level list.
+statement ok
+SELECT * FROM ast_select('test/data/python/qualified_names.py', '.func:not(.class, .call)');
+
+statement ok
+SELECT * FROM ast_select('test/data/python/qualified_names.py', '.func:has(.call, .class)');
+
+# A single selector with a combinator is unaffected.
+statement ok
+SELECT * FROM ast_select('test/data/python/qualified_names.py', '.class .func');

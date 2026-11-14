@@ -4629,6 +4629,35 @@ CREATE OR REPLACE MACRO ast_select_from(
                     AND n.node_id <= pe.node_id + pe.descendant_count
               )
         ),
+        -- Selector-list guard (#330): "A, B" parses as ONE `selectors` node whose
+        -- children are the items, separated by `,` tokens. The typed views above
+        -- gather every item's type/class/id into one compound filter, so a list
+        -- asked for nodes matching ALL items and silently returned 0 rows. Until
+        -- lists are supported, raise. A comma inside pseudo-class arguments
+        -- (":not(A, B)") has `arguments` as its parent, not `selectors`, so it is
+        -- not caught here. Each typed view references `sel` once (planner-bug
+        -- workaround, see the typed views at the top).
+
+)SQLMACRO"
+        R"SQLMACRO(
+        sel_selectors_nodes AS (
+            SELECT node_id FROM sel WHERE type = 'selectors'
+        ),
+        sel_commas AS (
+            SELECT node_id, parent_id FROM sel WHERE type = ','
+        ),
+        selector_list_validation AS (
+            SELECT CASE
+                WHEN EXISTS (SELECT 1 FROM sel_commas c
+                             JOIN sel_selectors_nodes s ON c.parent_id = s.node_id)
+                THEN error(
+                    'ast_select: selector lists ("A, B") are not supported yet and would '
+                    'match nothing (issue #330). Call ast_select once per selector and '
+                    'combine the results with UNION.'
+                )
+                ELSE true
+            END AS ok
+        ),
         parse_completeness_validation AS (
             SELECT CASE
                 WHEN EXISTS (SELECT 1 FROM sel_uncovered)
@@ -4642,9 +4671,6 @@ CREATE OR REPLACE MACRO ast_select_from(
             END AS ok
         ),
 
-
-)SQLMACRO"
-        R"SQLMACRO(
         -- Precompute selector properties as scalars.
         -- validations_ok folds ALL "can't answer" guards (#89) into the one-row
         -- CTE that every matched_base branch cross-joins. This is deliberate:
@@ -4681,6 +4707,7 @@ CREATE OR REPLACE MACRO ast_select_from(
                  AND (SELECT ok FROM pseudo_element_validation)
                  AND (SELECT ok FROM has_args_validation)
                  AND (SELECT ok FROM combinator_validation)
+                 AND (SELECT ok FROM selector_list_validation)
                  AND (SELECT ok FROM parse_completeness_validation)) as validations_ok
         ),
 
@@ -4885,6 +4912,9 @@ CREATE OR REPLACE MACRO ast_select_from(
                                 WHEN '^=' THEN a.name LIKE ac.attr_value_esc || '%' ESCAPE '\'
                                 WHEN '$=' THEN a.name LIKE '%' || ac.attr_value_esc ESCAPE '\'
                                 ELSE a.name = ac.attr_value END
+
+)SQLMACRO"
+        R"SQLMACRO(
             WHEN ac.attr_name = 'type' THEN
                 CASE ac.attr_op WHEN '*=' THEN a.type LIKE '%' || ac.attr_value_esc || '%' ESCAPE '\'
                                 WHEN '^=' THEN a.type LIKE ac.attr_value_esc || '%' ESCAPE '\'
@@ -4905,9 +4935,6 @@ CREATE OR REPLACE MACRO ast_select_from(
                 AND NOT is_constituent(a.flags)
 
             -- Native extraction: modifiers array
-
-)SQLMACRO"
-        R"SQLMACRO(
             WHEN ac.attr_name = 'modifier' THEN
                 CASE ac.attr_op WHEN '*=' THEN list_contains(a.modifiers, ac.attr_value)
                                 ELSE list_contains(a.modifiers, ac.attr_value) END
@@ -5099,6 +5126,9 @@ CREATE OR REPLACE MACRO ast_select_from(
             -- NOTE (#184): the argument describes THIS node, so a semantic class
             -- combined with a different-kind argument is a contradiction and correctly
             -- yields 0 -- `.fn:is-scope(.class#Animal)` asks for a node that is both a
+
+)SQLMACRO"
+        R"SQLMACRO(
             -- function and the class Animal. For "functions INSIDE class Animal" use
             -- `.fn:in-scope(.class#Animal)`; to MAP a match to its scope use `::scope`.
             -- Measured anchors on the python fixture:
@@ -5118,9 +5148,6 @@ CREATE OR REPLACE MACRO ast_select_from(
                     (pc.pseudo_arg IS NULL AND pc.pseudo_arg_class IS NULL)
                     OR (( pc.pseudo_arg = 'function'
                           OR (pc.pseudo_arg_class IS NOT NULL
-
-)SQLMACRO"
-        R"SQLMACRO(
                               AND is_semantic_type(semantic_type_code('DEFINITION_FUNCTION'), UPPER(pc.pseudo_arg_class))))
                         AND is_semantic_type(a.semantic_type, 'FN'))
                     OR (( pc.pseudo_arg = 'class'
@@ -5359,6 +5386,9 @@ CREATE OR REPLACE MACRO ast_select(
     -- ('full', 'smart', 'none', 'none+schema', ...) and is forwarded verbatim,
     -- so an explicit level wins over the auto-materialization: a caller who
     -- passes peek := 'none+schema' and also filters on [peek...] gets the
+
+)SQLMACRO"
+        R"SQLMACRO(
     -- peek_filter_validation error with its re-parse hint, rather than having
     -- the argument silently overridden. Explicit beats implicit. The default,
     -- NULL, means "decide exactly as before", so no existing caller moves.
