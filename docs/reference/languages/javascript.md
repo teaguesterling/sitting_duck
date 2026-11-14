@@ -90,6 +90,7 @@ JavaScript has three variable declaration keywords with different scoping and ho
 |-----------|---------------|-----------------|-------------|
 | `variable_declaration` | DEFINITION_VARIABLE | FIND_IDENTIFIER | Variable declaration: `var name = value;` |
 | `lexical_declaration` | DEFINITION_VARIABLE | FIND_IDENTIFIER | Lexical declaration: `let` or `const` |
+| `using_declaration` | DEFINITION_VARIABLE | FIND_IDENTIFIER | Using declaration: `using f = open()`, `await using f = open()` |
 | `variable_declarator` | DEFINITION_VARIABLE | FIND_IDENTIFIER | Variable declarator: `name = value` within declaration |
 
 ## Function Calls and Expressions
