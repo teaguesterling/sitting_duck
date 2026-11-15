@@ -3419,16 +3419,31 @@ CREATE OR REPLACE MACRO ast_select_from(
             JOIN sel_arg_blocks a ON a.parent_id = pcs.node_id
         ),
 
-        -- First tag_name in each pcs's args block
-        sel_pcs_first_tag_name AS (
-            SELECT pcs_id, name FROM (
-                SELECT pa.pcs_id, t.name,
-                       row_number() OVER (PARTITION BY pa.pcs_id ORDER BY t.node_id) AS rn
-                FROM sel_pcs_to_args pa
-                JOIN sel_tag_names t
-                  ON t.node_id > pa.args_id
-                 AND t.node_id <= pa.args_id + pa.args_descendants
-            ) WHERE rn = 1
+        -- Every sel node, for the per-item CTEs below and the selector-list
+        -- CTEs (#330). References `sel` once (planner-bug workaround).
+        sel_nodes_flat AS (
+            SELECT node_id, parent_id, type, name, descendant_count FROM sel
+        ),
+
+        -- Items of a pseudo-class's argument list (#330): ":has(A, B)" and
+        -- ":not(A, B)" hold their items as direct children of `arguments`,
+        -- separated by `,` and bracketed by `(` `)`. One row per item, with the
+        -- same three filters a selector-list item uses, and whether the item is
+        -- a plain type / .class / #id compound (`simple`).
+        sel_arg_item_filters AS (
+            SELECT pa.pcs_id, i.node_id AS item_id, i.type AS item_type, i.name AS item_text,
+                   arg_min(n.name, n.node_id) FILTER (WHERE n.type = 'tag_name') AS type_filter,
+                   arg_min(n.name, n.node_id) FILTER (WHERE n.type = 'id_name') AS name_filter,
+                   arg_min(n.name, n.node_id) FILTER (WHERE n.type = 'class_name') AS class_filter,
+                   bool_and(n.type IN ('tag_name', 'identifier', 'class_selector', 'class_name',
+                                       'id_selector', 'id_name', '.', '#')) AS simple
+            FROM sel_pcs_to_args pa
+            JOIN sel_nodes_flat i
+              ON i.parent_id = pa.args_id AND i.type NOT IN ('(', ')', ',')
+            JOIN sel_nodes_flat n
+              ON n.node_id >= i.node_id
+             AND n.node_id <= i.node_id + i.descendant_count
+            GROUP BY pa.pcs_id, i.node_id, i.type, i.name
         ),
 
         -- First id_name in each pcs's args block
@@ -3573,17 +3588,18 @@ CREATE OR REPLACE MACRO ast_select_from(
         ),
 
         -- :has() — pseudo_class_selectors named 'has' that are NOT inside :not() args.
+        -- One row per argument item (#330): ":has(A, B)" holds when ANY item has a
+        -- matching descendant, and each :has() must hold. Before, the first type,
+        -- #id and .class anywhere in the arguments were taken, mixing the items.
         has_conditions AS (
             SELECT pcs.node_id AS has_id,
-                   ftn.name AS has_type,
-                   fin.name AS has_name,
-                   fcn.name AS has_class
+                   f.type_filter AS has_type,
+                   f.name_filter AS has_name,
+                   f.class_filter AS has_class
             FROM sel_pseudo_classes pcs
             JOIN sel_class_names cn ON cn.parent_id = pcs.node_id AND cn.name = 'has'
             JOIN sel_pcs_outside_not_args nn ON nn.pcs_id = pcs.node_id
-            LEFT JOIN sel_pcs_first_tag_name  ftn ON ftn.pcs_id = pcs.node_id
-            LEFT JOIN sel_pcs_first_id_name   fin ON fin.pcs_id = pcs.node_id
-            LEFT JOIN sel_pcs_first_class_name fcn ON fcn.pcs_id = pcs.node_id
+            LEFT JOIN sel_arg_item_filters f ON f.pcs_id = pcs.node_id
         ),
 
         -- :not(:has()) conditions — for each :not()'s args block, find a :has() inside it.
@@ -3601,13 +3617,22 @@ CREATE OR REPLACE MACRO ast_select_from(
         ),
         not_has_conditions AS (
             SELECT nh.not_pcs_id AS not_id,
-                   ftn.name AS not_has_type,
-                   fin.name AS not_has_name,
-                   fcn.name AS not_has_class
+                   f.type_filter AS not_has_type,
+                   f.name_filter AS not_has_name,
+                   f.class_filter AS not_has_class
             FROM sel_not_to_has nh
-            LEFT JOIN sel_pcs_first_tag_name   ftn ON ftn.pcs_id = nh.has_pcs_id
-            LEFT JOIN sel_pcs_first_id_name    fin ON fin.pcs_id = nh.has_pcs_id
-            LEFT JOIN sel_pcs_first_class_name fcn ON fcn.pcs_id = nh.has_pcs_id
+            LEFT JOIN sel_arg_item_filters f ON f.pcs_id = nh.has_pcs_id
+        ),
+
+        -- :not(A, B) with plain type / .class / #id items (#330). Before, these
+        -- items were silently dropped: .func:not(#a) returned every function.
+        -- Only top-level :not() counts. A node is excluded if it matches any item.
+        not_simple_conditions AS (
+            SELECT f.type_filter, f.name_filter, f.class_filter
+            FROM sel_arg_item_filters f
+            JOIN sel_class_names cn ON cn.parent_id = f.pcs_id AND cn.name = 'not'
+            JOIN sel_pcs_outside_any_args outside ON outside.pcs_id = f.pcs_id
+            WHERE f.simple
         ),
 
         -- [attr op value] conditions — supports =, *=, ^=, $= operators.
@@ -3637,6 +3662,9 @@ CREATE OR REPLACE MACRO ast_select_from(
                 LEFT JOIN sel_attr_first_str   fstr   ON fstr.attr_id   = s.node_id
                 LEFT JOIN sel_attr_first_int   fint   ON fint.attr_id   = s.node_id
                 LEFT JOIN (
+
+)SQLMACRO"
+        R"SQLMACRO(
                     SELECT DISTINCT parent_id AS attr_id FROM sel_attr_op_starswith
                 ) starswith ON starswith.attr_id = s.node_id
                 LEFT JOIN (
@@ -3666,9 +3694,6 @@ CREATE OR REPLACE MACRO ast_select_from(
                    fcn.name AS pseudo_arg_class,   -- a `.class` inside the args (e.g. :is-scope(.fn))
                    fin.name AS pseudo_arg_name,    -- a `#name` inside the args (e.g. :is-scope(.fn#foo))
                    fpv.name AS pseudo_arg_plain,   -- an unquoted plain_value (e.g. the `function#foo` footgun)
-
-)SQLMACRO"
-        R"SQLMACRO(
                    pargs.args_id IS NOT NULL AS has_arg_block,  -- `:calls()` vs bare `:calls` (#191)
                    false as negated
             FROM sel_pseudo_classes pcs
@@ -3878,6 +3903,9 @@ CREATE OR REPLACE MACRO ast_select_from(
                     'ast_select: :{} takes no argument. {}',
                     (SELECT name FROM zero_arity_offender),
                     CASE (SELECT name FROM zero_arity_offender)
+
+)SQLMACRO"
+        R"SQLMACRO(
                         WHEN 'typed' THEN 'It tests only WHETHER a type annotation is present. '
                                           'To filter on the type itself use the attribute form, '
                                           'e.g. [signature="None"] or [signature*="int"].'
@@ -3906,9 +3934,6 @@ CREATE OR REPLACE MACRO ast_select_from(
         --   .fn:calls()                17   no argument at all
         --   .call:called-by(.fn#main)  44   argument ignored
         --
-
-)SQLMACRO"
-        R"SQLMACRO(
         -- 17 is "functions that call anything". The result was plausible and
         -- non-empty, so the caller could not tell the filter had been dropped --
         -- the #184 failure class, where a wrong argument TYPE is accepted and
@@ -4107,6 +4132,9 @@ CREATE OR REPLACE MACRO ast_select_from(
                 ) THEN error(
                     'ast_select: attribute "modifier" supports = and *= (both meaning '
                     '"has this modifier" — modifiers is a list), not ^= or $=.'
+
+)SQLMACRO"
+        R"SQLMACRO(
                 )
                 ELSE true
             END AS ok
@@ -4139,9 +4167,6 @@ CREATE OR REPLACE MACRO ast_select_from(
         unknown_semantic_class AS (
             SELECT c.cls
             FROM all_semantic_classes c
-
-)SQLMACRO"
-        R"SQLMACRO(
             WHERE NOT EXISTS (SELECT 1 FROM ast_semantic_aliases() a WHERE a.alias = UPPER(c.cls))
               AND semantic_type_code(UPPER(c.cls)) IS NULL
             ORDER BY c.cls
@@ -4286,6 +4311,31 @@ CREATE OR REPLACE MACRO ast_select_from(
             FROM sel_pcs_to_args pa
             JOIN sel_class_names cn ON cn.parent_id = pa.pcs_id AND cn.name = 'has'
         ),
+        -- :not() argument validation (#330): an item inside a top-level :not()
+        -- is honoured if it is a plain type / .class / #id compound
+        -- (not_simple_conditions) or a pseudo-class, including :has()
+        -- (pseudo_classes_raw, not_has_conditions). Anything else -- an attribute
+        -- filter, a combinator -- used to be dropped silently, so the :not()
+        -- excluded nothing. Reject it.
+        not_args_validation AS (
+            SELECT CASE
+                WHEN EXISTS (
+                    SELECT 1 FROM sel_arg_item_filters f
+                    JOIN sel_class_names cn ON cn.parent_id = f.pcs_id AND cn.name = 'not'
+                    JOIN sel_pcs_outside_any_args outside ON outside.pcs_id = f.pcs_id
+                    WHERE NOT f.simple AND f.item_type <> 'pseudo_class_selector'
+                ) THEN error(format(
+                    'ast_select: "{}" inside :not(...) is not supported (only a type, '
+                    '#name, .class, a pseudo-class or :has() are honored there; issue '
+                    '#330). Filter it in SQL over the result, or chain ast_select calls.',
+                    (SELECT f.item_text FROM sel_arg_item_filters f
+                     JOIN sel_class_names cn ON cn.parent_id = f.pcs_id AND cn.name = 'not'
+                     JOIN sel_pcs_outside_any_args outside ON outside.pcs_id = f.pcs_id
+                     WHERE NOT f.simple AND f.item_type <> 'pseudo_class_selector'
+                     ORDER BY f.item_id LIMIT 1)))
+                ELSE true
+            END AS ok
+        ),
         has_args_validation AS (
             SELECT CASE
                 WHEN EXISTS (
@@ -4330,6 +4380,9 @@ CREATE OR REPLACE MACRO ast_select_from(
         --   :contains("code") — some descendant IS the pattern root (any depth)
         -- Both share the same parsed pattern. Only the first :match/:contains
         -- occurrence in a selector is extracted (one pattern per selector).
+
+)SQLMACRO"
+        R"SQLMACRO(
         -- Exact structural match: db.execute() matches only zero-arg calls,
         -- db.execute("SELECT 1") matches only that exact call.
         -- Use ___ (triple underscore) as wildcard for any name.
@@ -4387,9 +4440,6 @@ CREATE OR REPLACE MACRO ast_select_from(
                            THEN 'function'
                        WHEN pseudo_arg = 'class'
                             OR (pseudo_arg_class IS NOT NULL
-
-)SQLMACRO"
-        R"SQLMACRO(
                                 AND is_semantic_type(semantic_type_code('DEFINITION_CLASS'), UPPER(pseudo_arg_class)))
                            THEN 'class'
                        WHEN pseudo_arg = 'module'
@@ -4586,6 +4636,9 @@ CREATE OR REPLACE MACRO ast_select_from(
             JOIN ast sib ON sib.type = pc.pseudo_arg
             JOIN ast a ON a.file_path = sib.file_path
                       AND a.parent_id = sib.parent_id
+
+)SQLMACRO"
+        R"SQLMACRO(
                       AND sib.sibling_index < a.sibling_index
             WHERE pc.pseudo_name = 'follows'
         ),
@@ -4629,32 +4682,50 @@ CREATE OR REPLACE MACRO ast_select_from(
                     AND n.node_id <= pe.node_id + pe.descendant_count
               )
         ),
-        -- Selector-list guard (#330): "A, B" parses as ONE `selectors` node whose
-        -- children are the items, separated by `,` tokens. The typed views above
-        -- gather every item's type/class/id into one compound filter, so a list
-        -- asked for nodes matching ALL items and silently returned 0 rows. Until
-        -- lists are supported, raise. A comma inside pseudo-class arguments
-        -- (":not(A, B)") has `arguments` as its parent, not `selectors`, so it is
-        -- not caught here. Each typed view references `sel` once (planner-bug
-        -- workaround, see the typed views at the top).
-
-)SQLMACRO"
-        R"SQLMACRO(
-        sel_selectors_nodes AS (
-            SELECT node_id FROM sel WHERE type = 'selectors'
+        -- Selector lists (#330). "A, B" parses as ONE `selectors` node whose
+        -- children are the items, separated by `,` tokens; a single selector has
+        -- no `selectors` node at all, so none of this applies to it. The typed
+        -- views and the simple_* filters above gather every item into one
+        -- compound filter, which is why a list used to ask for nodes matching ALL
+        -- items and silently returned 0 rows.
+        --
+        -- A list is answered by its own matched_base arm (sel_type = 'selectors'),
+        -- one filter row per item, a node matching if ANY item matches. Only
+        -- plain type / .class / #id compounds are supported as items; any other
+        -- item raises rather than returning a partial answer. A comma inside
+        -- pseudo-class arguments (":not(A, B)") has `arguments` as its parent, not
+        -- `selectors`, so it is not a list here. `sel_nodes_flat` references `sel`
+        -- once (planner-bug workaround, see the typed views at the top).
+        list_items AS (
+            SELECT c.node_id AS item_id, c.name AS item_text, c.descendant_count
+            FROM sel_nodes_flat c
+            JOIN sel_nodes_flat s ON c.parent_id = s.node_id AND s.type = 'selectors'
+            WHERE c.type <> ','
         ),
-        sel_commas AS (
-            SELECT node_id, parent_id FROM sel WHERE type = ','
+        -- Per item, the same three filters a single selector uses: its type
+        -- (tag_name), its #id and its first .class, in node order; plus whether
+        -- the item holds anything else.
+        list_filters AS (
+            SELECT i.item_id, i.item_text,
+                   arg_min(n.name, n.node_id) FILTER (WHERE n.type = 'tag_name') AS type_filter,
+                   arg_min(n.name, n.node_id) FILTER (WHERE n.type = 'id_name') AS name_filter,
+                   arg_min(n.name, n.node_id) FILTER (WHERE n.type = 'class_name') AS class_filter,
+                   bool_or(n.type NOT IN ('tag_name', 'identifier', 'class_selector', 'class_name',
+                                          'id_selector', 'id_name', '.', '#')) AS unsupported
+            FROM list_items i
+            JOIN sel_nodes_flat n
+              ON n.node_id >= i.item_id
+             AND n.node_id <= i.item_id + i.descendant_count
+            GROUP BY i.item_id, i.item_text
         ),
         selector_list_validation AS (
             SELECT CASE
-                WHEN EXISTS (SELECT 1 FROM sel_commas c
-                             JOIN sel_selectors_nodes s ON c.parent_id = s.node_id)
-                THEN error(
-                    'ast_select: selector lists ("A, B") are not supported yet and would '
-                    'match nothing (issue #330). Call ast_select once per selector and '
-                    'combine the results with UNION.'
-                )
+                WHEN EXISTS (SELECT 1 FROM list_filters WHERE unsupported)
+                THEN error(format(
+                    'ast_select: a selector list ("A, B") may only hold type, .class and '
+                    '#id items, and "{}" is not one (issue #330). Run that item in its '
+                    'own ast_select call and combine the results with UNION.',
+                    (SELECT item_text FROM list_filters WHERE unsupported ORDER BY item_id LIMIT 1)))
                 ELSE true
             END AS ok
         ),
@@ -4706,6 +4777,7 @@ CREATE OR REPLACE MACRO ast_select_from(
                  AND (SELECT ok FROM call_name_binding_validation)
                  AND (SELECT ok FROM pseudo_element_validation)
                  AND (SELECT ok FROM has_args_validation)
+                 AND (SELECT ok FROM not_args_validation)
                  AND (SELECT ok FROM combinator_validation)
                  AND (SELECT ok FROM selector_list_validation)
                  AND (SELECT ok FROM parse_completeness_validation)) as validations_ok
@@ -4739,6 +4811,25 @@ CREATE OR REPLACE MACRO ast_select_from(
                    -- a function's declarator): the enclosing construct is matched
                    -- instead, so a class selects each construct once (#139).
                    AND NOT is_constituent(a.flags)))
+
+        UNION ALL
+
+        -- Selector list: "A, B" (#330). A node matches if ANY item's filters
+        -- match it, with the same per-filter rules as the simple arm above. The
+        -- IN semi-join returns each node once however many items it matches, and
+        -- planned ~0.25 s cheaper per call than a correlated EXISTS (measured).
+        SELECT a.*
+        FROM ast a, sel_props sp
+        WHERE sp.validations_ok
+          AND sp.sel_type = 'selectors'
+          AND (a.file_path, a.node_id) IN (
+              SELECT a2.file_path, a2.node_id FROM ast a2, list_filters f
+              WHERE (f.type_filter IS NULL OR a2.type = f.type_filter)
+                AND (f.name_filter IS NULL OR a2.name = f.name_filter)
+                AND (f.class_filter IS NULL
+                     OR (is_semantic_type(a2.semantic_type, UPPER(f.class_filter))
+                         AND NOT is_syntax_only(a2.flags)
+                         AND NOT is_constituent(a2.flags))))
 
         UNION ALL
 
@@ -4801,6 +4892,9 @@ CREATE OR REPLACE MACRO ast_select_from(
           AND (sp.right_type IS NULL OR a.type = sp.right_type)
           AND (sp.right_class IS NULL
                OR (is_semantic_type(a.semantic_type, UPPER(sp.right_class))
+
+)SQLMACRO"
+        R"SQLMACRO(
                    AND NOT is_syntax_only(a.flags)))
           AND (sp.right_id IS NULL OR a.name = sp.right_id)
           AND EXISTS (
@@ -4858,11 +4952,13 @@ CREATE OR REPLACE MACRO ast_select_from(
     SELECT a.*
     FROM matched_base a
     -- :has() filters (for simple/compound selectors)
+    -- Each :has() (has_id) must hold; within one, ANY of its items may match.
     WHERE NOT EXISTS (
-        SELECT 1 FROM has_conditions h
+        SELECT 1 FROM (SELECT DISTINCT has_id FROM has_conditions) hh
         WHERE NOT EXISTS (
-            SELECT 1 FROM ast d
-            WHERE d.file_path = a.file_path
+            SELECT 1 FROM has_conditions h, ast d
+            WHERE h.has_id = hh.has_id
+              AND d.file_path = a.file_path
               AND d.node_id > a.node_id
               AND d.node_id <= a.node_id + a.descendant_count
               AND (h.has_type IS NULL OR d.type = h.has_type)
@@ -4877,6 +4973,19 @@ CREATE OR REPLACE MACRO ast_select_from(
                        AND NOT is_syntax_only(d.flags)
                        AND NOT is_constituent(d.flags)))
         )
+    )
+    -- :not(A, B) with plain type / .class / #id items (#330). An anti-join on the
+    -- node key, not a correlated NOT EXISTS: the EXISTS form planned ~0.38 s
+    -- slower per call, for every selector (measured).
+    AND (a.file_path, a.node_id) NOT IN (
+        SELECT x.file_path, x.node_id
+        FROM ast x, not_simple_conditions ns
+        WHERE (ns.type_filter IS NULL OR x.type = ns.type_filter)
+          AND (ns.name_filter IS NULL OR x.name = ns.name_filter)
+          AND (ns.class_filter IS NULL
+               OR (is_semantic_type(x.semantic_type, UPPER(ns.class_filter))
+                   AND NOT is_syntax_only(x.flags)
+                   AND NOT is_constituent(x.flags)))
     )
     -- :not(:has()) filters
     AND NOT EXISTS (
@@ -4912,9 +5021,6 @@ CREATE OR REPLACE MACRO ast_select_from(
                                 WHEN '^=' THEN a.name LIKE ac.attr_value_esc || '%' ESCAPE '\'
                                 WHEN '$=' THEN a.name LIKE '%' || ac.attr_value_esc ESCAPE '\'
                                 ELSE a.name = ac.attr_value END
-
-)SQLMACRO"
-        R"SQLMACRO(
             WHEN ac.attr_name = 'type' THEN
                 CASE ac.attr_op WHEN '*=' THEN a.type LIKE '%' || ac.attr_value_esc || '%' ESCAPE '\'
                                 WHEN '^=' THEN a.type LIKE ac.attr_value_esc || '%' ESCAPE '\'
@@ -5026,6 +5132,9 @@ CREATE OR REPLACE MACRO ast_select_from(
         -- pseudo-class's precomputed hit set (pc_hits, above).
         LEFT JOIN pc_hits h
           ON h.pc_id = pc.pc_id AND h.file_path = a.file_path AND h.node_id = a.node_id
+
+)SQLMACRO"
+        R"SQLMACRO(
         WHERE pc.negated = COALESCE(CASE pc.pseudo_name
 
             -- Standard CSS positional pseudo-classes
@@ -5126,9 +5235,6 @@ CREATE OR REPLACE MACRO ast_select_from(
             -- NOTE (#184): the argument describes THIS node, so a semantic class
             -- combined with a different-kind argument is a contradiction and correctly
             -- yields 0 -- `.fn:is-scope(.class#Animal)` asks for a node that is both a
-
-)SQLMACRO"
-        R"SQLMACRO(
             -- function and the class Animal. For "functions INSIDE class Animal" use
             -- `.fn:in-scope(.class#Animal)`; to MAP a match to its scope use `::scope`.
             -- Measured anchors on the python fixture:
@@ -5260,6 +5366,9 @@ CREATE OR REPLACE MACRO ast_select_from(
     pe_call_sites AS (
         SELECT DISTINCT call_node.* FROM matched m
         JOIN ast call_node ON call_node.file_path = m.file_path
+
+)SQLMACRO"
+        R"SQLMACRO(
           AND call_node.semantic_type = 'COMPUTATION_CALL'
           AND call_node.name = m.name
           AND call_node.node_id != m.node_id
@@ -5386,9 +5495,6 @@ CREATE OR REPLACE MACRO ast_select(
     -- ('full', 'smart', 'none', 'none+schema', ...) and is forwarded verbatim,
     -- so an explicit level wins over the auto-materialization: a caller who
     -- passes peek := 'none+schema' and also filters on [peek...] gets the
-
-)SQLMACRO"
-        R"SQLMACRO(
     -- peek_filter_validation error with its re-parse hint, rather than having
     -- the argument silently overridden. Explicit beats implicit. The default,
     -- NULL, means "decide exactly as before", so no existing caller moves.
