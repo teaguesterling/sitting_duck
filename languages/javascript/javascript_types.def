@@ -1228,6 +1228,57 @@ DEF_TYPE("type_assertion", TYPE_REFERENCE, NONE, NONE, 0)
 /** @} */ // end javascript_types
 
 // ============================================================================
+// JSX
+// ============================================================================
+
+/**
+ * @defgroup javascript_jsx JSX
+ * @brief JSX elements, tags and attributes
+ *
+ * An element is a CALL SITE, because `<Foo/>` compiles to
+ * `React.createElement(Foo, ...)`. An attribute is a NAMED ARGUMENT, not a
+ * definition: html_types.def declares its `attribute` as DEFINITION_VARIABLE,
+ * but in JSX a prop is an argument, so it follows python's `keyword_argument`.
+ *
+ * These seven entries reach three languages, because typescript_types.def
+ * `#include`s this file and TSXAdapter takes TypeScript's node configs. The
+ * typescript rows are dead; its grammar emits no jsx node.
+ *
+ * Five types take CUSTOM because no generic strategy answers correctly: a tag
+ * is an identifier, a member_expression or a jsx_namespace_name, and
+ * FIND_IDENTIFIER returns `Foo` for `<Foo.Bar>` and `svg` for `<svg:circle>`.
+ * src/include/jsx_name_extraction.hpp holds the one helper both
+ * ExtractNodeName methods call. Native extraction is NONE throughout, so
+ * `parameters` stays empty for JSX.
+ *
+ * @see tracker/features/058-jsx-node-types.md for the ruling and the evidence
+ * @{
+ */
+
+/** @brief `<div>...</div>` and a fragment `<>...</>`; named by its tag */
+DEF_TYPE("jsx_element", COMPUTATION_CALL, CUSTOM, NONE, 0)
+
+/** @brief `<br/>`; named by its tag */
+DEF_TYPE("jsx_self_closing_element", COMPUTATION_CALL, CUSTOM, NONE, 0)
+
+/** @brief The `<div ...>` tag itself; named by its tag */
+DEF_TYPE("jsx_opening_element", PARSER_DELIMITER, CUSTOM, NONE, 0)
+
+/** @brief The `</div>` tag; named by its tag */
+DEF_TYPE("jsx_closing_element", PARSER_DELIMITER, CUSTOM, NONE, 0)
+
+/** @brief A prop: `className="x"`, `disabled`, `xlink:href="#z"` */
+DEF_TYPE("jsx_attribute", NAME_ATTRIBUTE, CUSTOM, NONE, 0)
+
+/** @brief A namespaced tag or prop name: `svg:circle`, `xlink:href` */
+DEF_TYPE("jsx_namespace_name", NAME_QUALIFIED, NODE_TEXT, NONE, 0)
+
+/** @brief A braced expression: `{value}`, and a spread prop `{...rest}` */
+DEF_TYPE("jsx_expression", PARSER_CONSTRUCT, NONE, NONE, 0)
+
+/** @} */ // end javascript_jsx
+
+// ============================================================================
 // PARSER ERRORS
 // ============================================================================
 

@@ -1,0 +1,300 @@
+# name: test/sql/languages/jsx_node_types.test
+# description: The 8 jsx_* node types are classified and named, identically in javascript and tsx (058)
+# group: [languages]
+
+# tracker/features/058-jsx-node-types.md, stance A (ruled 2026-11-16): a JSX
+# element is a CALL SITE, because <Foo/> compiles to React.createElement(Foo, ...),
+# and a JSX attribute is a NAMED ARGUMENT, not a definition. HTML's attribute is
+# DEFINITION_VARIABLE + NAME_DEFINITION; python's keyword_argument is not. JSX
+# follows python's reading, so a prop never reaches is_definition().
+#
+# WHY TWO IDENTICAL FIXTURES. test/data/jsx/shapes.jsx and
+# test/data/tsx/shapes.tsx are byte-identical. The javascript and tsx grammars
+# both carry all 8 jsx_* types, and JavaScriptAdapter and TypeScriptAdapter are
+# SIBLINGS -- both derive straight from LanguageAdapter and share no
+# ExtractNodeName. TSXAdapter derives from TypeScriptAdapter. So a CUSTOM name
+# helper wired into one adapter and not the other gives .jsx and .tsx different
+# answers, with NO error: the generic CUSTOM case in src/language_adapter.cpp
+# returns the empty string. This file asserts both languages, every time. That
+# is the class of problem PR #329 shipped -- behaviour keyed on the language or
+# the adapter rather than on the node configuration.
+
+require sitting_duck
+
+# =============================================================================
+# Controls first. Every comparison below is between two sets, and two empty
+# sets are equal, so an absent fixture or a broken grammar must fail HERE and
+# not read as a pass further down.
+# =============================================================================
+
+query III
+SELECT language, count(*) AS nodes, count(*) FILTER (type = 'ERROR') AS errors
+FROM read_ast(['test/data/jsx/shapes.jsx', 'test/data/tsx/shapes.tsx'])
+GROUP BY 1 ORDER BY 1;
+----
+javascript	149	0
+tsx	149	0
+
+# All 8 types are present in each fixture, so no assertion below is vacuous.
+query TII
+SELECT type,
+       count(*) FILTER (WHERE language = 'javascript') AS in_jsx,
+       count(*) FILTER (WHERE language = 'tsx')        AS in_tsx
+FROM read_ast(['test/data/jsx/shapes.jsx', 'test/data/tsx/shapes.tsx'])
+WHERE type LIKE 'jsx_%' GROUP BY 1 ORDER BY 1;
+----
+jsx_attribute	5	5
+jsx_closing_element	4	4
+jsx_element	4	4
+jsx_expression	5	5
+jsx_namespace_name	2	2
+jsx_opening_element	4	4
+jsx_self_closing_element	3	3
+jsx_text	1	1
+
+# =============================================================================
+# The declaration table. One entry per type lives in
+# languages/javascript/javascript_types.def; typescript #includes that file and
+# TSXAdapter takes TypeScript's node configs, so ONE entry reaches all three
+# languages. typescript's rows are dead -- its grammar emits no jsx node at all
+# -- exactly as jsx_text's row has been dead there since before this feature.
+# =============================================================================
+
+query TTT
+SELECT node_type, semantic_type, name_strategy FROM ast_type_map('tsx')
+WHERE node_type LIKE 'jsx_%' ORDER BY node_type;
+----
+jsx_attribute	NAME_ATTRIBUTE	custom
+jsx_closing_element	PARSER_DELIMITER	custom
+jsx_element	COMPUTATION_CALL	custom
+jsx_expression	PARSER_CONSTRUCT	none
+jsx_namespace_name	NAME_QUALIFIED	node_text
+jsx_opening_element	PARSER_DELIMITER	custom
+jsx_self_closing_element	COMPUTATION_CALL	custom
+jsx_text	PARSER_CONSTRUCT	node_text
+
+# The three languages declare the 8 types identically, because there is one
+# declaration. A per-language table would drift; this asserts there is not one.
+query TI
+SELECT language, count(*) FROM ast_type_map()
+WHERE node_type LIKE 'jsx_%' GROUP BY 1 ORDER BY 1;
+----
+javascript	8
+tsx	8
+typescript	8
+
+query I
+SELECT count(*) FROM (
+    SELECT node_type, semantic_type, name_strategy, native_strategy FROM ast_type_map('javascript') WHERE node_type LIKE 'jsx_%'
+    EXCEPT
+    SELECT node_type, semantic_type, name_strategy, native_strategy FROM ast_type_map('tsx') WHERE node_type LIKE 'jsx_%');
+----
+0
+
+# Native extraction is NONE for every JSX type in this phase. HTML fills its
+# element `parameters` with FUNCTION_WITH_PARAMS, which dispatches into
+# html_native_extractors.hpp; javascript's and typescript's own specializations
+# parse function parameters, not JSX attributes. Until a JSX extractor exists,
+# `parameters` is empty for JSX and ast_select('div#id') cannot match it.
+query I
+SELECT count(*) FROM ast_type_map() WHERE node_type LIKE 'jsx_%' AND native_strategy <> 'none';
+----
+0
+
+# =============================================================================
+# A JSX ATTRIBUTE IS NOT A DEFINITION. This is the assertion the whole stance
+# turns on. is_definition() keys off the semantic TYPE, not the flag, and five
+# shipped macros filter on it (file_utilities.sql, tree_navigation.sql x4).
+# Under HTML's mapping, <div className="x" id="y"> would add two VARIABLE
+# DEFINITIONS named className and id to every React file in the corpus.
+# =============================================================================
+
+query II
+SELECT count(*) FILTER (WHERE is_definition(semantic_type)) AS definitions,
+       count(*) FILTER (WHERE is_definition(flags))         AS definition_flags
+FROM read_ast(['test/data/jsx/shapes.jsx', 'test/data/tsx/shapes.tsx'])
+WHERE type LIKE 'jsx_%';
+----
+0	0
+
+# =============================================================================
+# NAMES. A tag is one of THREE node types, and the generic FIND_IDENTIFIER
+# strategy gives a plausible wrong answer for two of them: it descends two
+# wrapper levels (FindIdentifierInWrappers(node, content, 2)), so it returns
+# `Foo` for <Foo.Bar> and `svg` for <svg:circle>. That is why these four types
+# take a CUSTOM strategy rather than the cheap generic one.
+#
+#   identifier           <div>         -> div
+#   member_expression    <Foo.Bar>     -> Foo.Bar
+#   jsx_namespace_name   <svg:circle>  -> svg:circle
+#
+# A FRAGMENT has no tag child at all: <>...</> is a jsx_element whose
+# jsx_opening_element holds only the two angle brackets. Its name is EMPTY.
+# Naming it anything would be an invented answer.
+# =============================================================================
+
+query TTT
+SELECT language, type, name
+FROM read_ast(['test/data/jsx/shapes.jsx', 'test/data/tsx/shapes.tsx'])
+WHERE type IN ('jsx_element', 'jsx_self_closing_element')
+ORDER BY language, start_line, node_id;
+----
+javascript	jsx_element	div
+javascript	jsx_self_closing_element	br
+javascript	jsx_element	Foo.Bar
+javascript	jsx_element	span
+javascript	jsx_self_closing_element	svg:circle
+javascript	jsx_element	(empty)
+javascript	jsx_self_closing_element	input
+tsx	jsx_element	div
+tsx	jsx_self_closing_element	br
+tsx	jsx_element	Foo.Bar
+tsx	jsx_element	span
+tsx	jsx_self_closing_element	svg:circle
+tsx	jsx_element	(empty)
+tsx	jsx_self_closing_element	input
+
+# The opening and closing tags carry the same name as the element they frame.
+query TTT
+SELECT language, type, name
+FROM read_ast(['test/data/jsx/shapes.jsx', 'test/data/tsx/shapes.tsx'])
+WHERE type IN ('jsx_opening_element', 'jsx_closing_element')
+ORDER BY language, start_line, node_id;
+----
+javascript	jsx_opening_element	div
+javascript	jsx_closing_element	div
+javascript	jsx_opening_element	Foo.Bar
+javascript	jsx_opening_element	span
+javascript	jsx_closing_element	span
+javascript	jsx_closing_element	Foo.Bar
+javascript	jsx_opening_element	(empty)
+javascript	jsx_closing_element	(empty)
+tsx	jsx_opening_element	div
+tsx	jsx_closing_element	div
+tsx	jsx_opening_element	Foo.Bar
+tsx	jsx_opening_element	span
+tsx	jsx_closing_element	span
+tsx	jsx_closing_element	Foo.Bar
+tsx	jsx_opening_element	(empty)
+tsx	jsx_closing_element	(empty)
+
+# ATTRIBUTE NAMES, including the namespaced one. `xlink:href` is the case the
+# generic FIND_PROPERTY strategy cannot answer: its child is a
+# jsx_namespace_name, not a property_identifier, so FIND_PROPERTY returns the
+# empty string. The CUSTOM helper reads either child. The feature's approved
+# table said find_property for this type; custom is a deliberate deviation,
+# recorded in tracker/features/058-jsx-node-types.md, because an empty name for
+# a real attribute is a silent gap.
+#
+# `disabled` is a boolean prop with no value, and it is still named.
+query TTT
+SELECT language, name, count(*) AS n
+FROM read_ast(['test/data/jsx/shapes.jsx', 'test/data/tsx/shapes.tsx'])
+WHERE type = 'jsx_attribute' GROUP BY 1, 2 ORDER BY 1, 2;
+----
+javascript	className	1
+javascript	disabled	1
+javascript	id	1
+javascript	x	1
+javascript	xlink:href	1
+tsx	className	1
+tsx	disabled	1
+tsx	id	1
+tsx	x	1
+tsx	xlink:href	1
+
+# jsx_namespace_name names itself with NODE_TEXT, in both its roles: as a tag
+# (<svg:circle/>) and as an attribute name (xlink:href).
+query TTT
+SELECT language, name, count(*) AS n
+FROM read_ast(['test/data/jsx/shapes.jsx', 'test/data/tsx/shapes.tsx'])
+WHERE type = 'jsx_namespace_name' GROUP BY 1, 2 ORDER BY 1, 2;
+----
+javascript	svg:circle	1
+javascript	xlink:href	1
+tsx	svg:circle	1
+tsx	xlink:href	1
+
+# A spread prop is NOT an attribute. `{...rest}` is a jsx_expression sibling of
+# the jsx_attribute nodes, holding a spread_element. It carries no name, and
+# jsx_expression declares `none`, so nothing invents one.
+query I
+SELECT count(*) FROM read_ast(['test/data/jsx/shapes.jsx', 'test/data/tsx/shapes.tsx'])
+WHERE type = 'jsx_expression' AND name IS NOT NULL AND name != '';
+----
+0
+
+# =============================================================================
+# THE TWO ADAPTERS AGREE. The strongest form of the #329 guard: every row of
+# the .jsx fixture equals the matching row of the byte-identical .tsx fixture.
+#
+# TWO COLUMNS ARE EXCLUDED, AND NOT BECAUSE THEY ARE INCONVENIENT. `modifiers`
+# and `signature_type` come from each adapter's own native context extraction,
+# and the two adapters legitimately disagree there. This was measured, not
+# assumed -- the unrestricted comparison returned 72 rows, every one of them on
+# those two columns and none of them on a jsx node:
+#
+#     type                 js modifiers  tsx modifiers              js sig  tsx sig
+#     identifier(div)      []            [in_jsx_opening_element]   NULL    identifier
+#     property_identifier  []            [property]                 NULL    property
+#     variable_declarator  []            []                         const   NULL
+#
+# So TypeScript's extractor fills them and JavaScript's mostly does not, and
+# `variable_declarator`'s signature_type runs the other way. That divergence
+# predates this feature and is pinned in its own right below, so excluding the
+# columns here hides nothing.
+# =============================================================================
+
+query I
+SELECT (SELECT count(*) FROM (
+          SELECT * EXCLUDE (language, file_path, modifiers, signature_type) FROM read_ast('test/data/jsx/shapes.jsx')
+          EXCEPT ALL
+          SELECT * EXCLUDE (language, file_path, modifiers, signature_type) FROM read_ast('test/data/tsx/shapes.tsx')))
+     + (SELECT count(*) FROM (
+          SELECT * EXCLUDE (language, file_path, modifiers, signature_type) FROM read_ast('test/data/tsx/shapes.tsx')
+          EXCEPT ALL
+          SELECT * EXCLUDE (language, file_path, modifiers, signature_type) FROM read_ast('test/data/jsx/shapes.jsx')));
+----
+0
+
+# The excluded divergence, pinned. Four node types, 36 rows, NO jsx node among
+# them. A jsx row appearing here would mean the two adapters' native extraction
+# had started to disagree about JSX, which this phase declares NONE for.
+query TI
+SELECT j.type, count(*) AS rows_differing
+FROM read_ast('test/data/jsx/shapes.jsx') j
+JOIN read_ast('test/data/tsx/shapes.tsx') t USING (node_id)
+WHERE j.modifiers IS DISTINCT FROM t.modifiers
+   OR j.signature_type IS DISTINCT FROM t.signature_type
+GROUP BY 1 ORDER BY 1;
+----
+identifier	22
+member_expression	2
+property_identifier	6
+variable_declarator	6
+
+# =============================================================================
+# ast_select('div') STILL DOES NOT REACH JSX, and that is this phase's declared
+# scope, not an oversight. src/sql_macros/css_selectors.sql gates element
+# matching on `language = 'html' AND type IN ('element','script_element',
+# 'style_element')`. Pinned here so that widening the gate is a deliberate act
+# with a failing test behind it.
+# =============================================================================
+
+query I
+SELECT count(*) FROM ast_select('test/data/tsx/shapes.tsx', 'div');
+----
+0
+
+# A JSX element IS reachable by its own node type, which the html rewrite would
+# break: that rewrite replaces `type` with the tag for named elements.
+query I
+SELECT count(*) FROM ast_select('test/data/tsx/shapes.tsx', 'jsx_element');
+----
+4
+
+# And a component usage is reachable as a call, which is what stance A buys.
+query I
+SELECT count(*) FROM ast_select('test/data/tsx/shapes.tsx', '.call') WHERE name = 'Foo.Bar';
+----
+1
