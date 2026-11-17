@@ -235,6 +235,39 @@ WHERE type = 'required_parameter' ORDER BY node_id;
 required_parameter	a
 required_parameter	<empty>
 
+# --- 059 phase 1: the arity and the names, which the SOURCE fixes ---------
+# The three assertions below assert only what the declared source determines:
+# how many parameters there are and what they are called. Neither depends on a
+# type-rendering convention, so neither can be quietly adjusted to match
+# whatever the binary prints. They fail before #319 and #320 are fixed and pass
+# after, and they are the red-first half of that work.
+#
+# THE TSX ROW IS NEW GROUND. #320 reports typescript. tsx inherits
+# TypeScriptAdapter, so it carries the same defect, and no issue says so.
+# Measured before the fix: tsx reported ['a : number'] for the two-parameter
+# function below, exactly as typescript did.
+
+query IT
+SELECT len(parameters), list_transform(parameters, lambda p: coalesce(nullif(p.name,''),'<e>'))::VARCHAR
+FROM parse_ast(E'class K {\n  void probe(int a, String[] b, java.util.Map<String,Integer> c, int... d) {}\n}\n', 'java', context := 'native')
+WHERE type = 'method_declaration';
+----
+4	[a, b, c, d]
+
+query IT
+SELECT len(parameters), list_transform(parameters, lambda p: coalesce(nullif(p.name,''),'<e>'))::VARCHAR
+FROM parse_ast(E'function probe(a: number, b: string = "x", ...c: number[]) {}\n', 'typescript', context := 'native')
+WHERE type = 'function_declaration';
+----
+3	[a, b, c]
+
+query IT
+SELECT len(parameters), list_transform(parameters, lambda p: coalesce(nullif(p.name,''),'<e>'))::VARCHAR
+FROM parse_ast(E'function probe(a: number, ...c: number[]) {}\n', 'tsx', context := 'native')
+WHERE type = 'function_declaration';
+----
+2	[a, c]
+
 # --- #321: a csharp `params` parameter has no node to read ----------------
 # This one is NOT a dispatch gap. tree-sitter-c-sharp emits ONE `parameter`
 # node for the two parameters below, with `params`, `array_type` and

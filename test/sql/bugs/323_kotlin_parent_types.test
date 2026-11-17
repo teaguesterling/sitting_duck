@@ -1,0 +1,154 @@
+# name: test/sql/bugs/323_kotlin_parent_types.test
+# description: Kotlin classes deliver their parent types (#323), including the `by` delegation form
+# group: [bugs]
+
+# WHY THIS FILE EXISTS
+#
+# Every Kotlin class reported `parameters = []` for its parent types.
+# CLASS_WITH_METHODS puts a class's supertypes in the `parameters` column, and
+# java does it correctly, so the column works and only kotlin was empty.
+#
+# THE CAUSE WAS ONE LETTER. src/include/kotlin_native_extractors.hpp searched
+# for a child named `delegation_specifiers` -- PLURAL. The grammar emits
+# `delegation_specifier`, singular, as a DIRECT child of class_declaration, one
+# per supertype, with no container between them. Of the grammar's 136 named
+# node types (263 entries counting anonymous ones) exactly three mention
+# delegation, and none is plural.
+#
+# THE SECOND EFFECT WAS QUIETER. `has_extends` is set only inside that dead
+# branch, so ExtractKotlinClassModifiers never pushed its `extends` marker
+# either. A kotlin class lost its supertypes AND the flag saying it had any.
+#
+# HOW TO READ A FAILURE HERE
+#
+#   Section 1 fails   -> the `parameters` column itself broke; java is the
+#                        control, so this is not a kotlin problem.
+#   Section 2 fails   -> kotlin stopped delivering parent types.
+#   Section 3 fails   -> the `by` delegation form regressed. A naive fix passes
+#                        section 2 and fails here.
+#   Section 4 fails   -> the fix over-fires on a class with no supertype.
+
+require sitting_duck
+
+# =============================================================================
+# 1. The control: java, which has always been correct
+# =============================================================================
+# This is first because sections 2 and 3 compare against a convention, and a
+# broken `parameters` column would otherwise read as a kotlin defect. It also
+# pins the convention itself: the parent is the type AS WRITTEN, type arguments
+# included.
+
+query TT
+SELECT name, list_transform(parameters, lambda p: p.name)::VARCHAR
+FROM parse_ast('class A {} class D extends A {}', 'java', context := 'native')
+WHERE type = 'class_declaration' ORDER BY name;
+----
+A	[]
+D	[A]
+
+query TT
+SELECT name, list_transform(parameters, lambda p: p.name)::VARCHAR
+FROM parse_ast('class E extends A<String> implements Comparable<E> {}', 'java', context := 'native')
+WHERE type = 'class_declaration';
+----
+E	[A<String>, Comparable<E>]
+
+# =============================================================================
+# 2. Kotlin delivers its parent types
+# =============================================================================
+
+query TT
+SELECT name, list_transform(parameters, lambda p: p.name)::VARCHAR
+FROM parse_ast(E'interface I\nopen class A\nclass D : A(), I {}\n', 'kotlin', context := 'native')
+WHERE type = 'class_declaration' ORDER BY name;
+----
+A	[]
+D	[A, I]
+I	[]
+
+# The same convention as java: the type as written, type arguments included.
+query TT
+SELECT name, list_transform(parameters, lambda p: p.name)::VARCHAR
+FROM parse_ast(E'class E : A<String>(), Comparable<E>\n', 'kotlin', context := 'native')
+WHERE type = 'class_declaration';
+----
+E	[A<String>, Comparable<E>]
+
+# The `extends` marker, which only the dead branch ever set.
+#
+# NOTE A CROSS-LANGUAGE INCONSISTENCY, pinned rather than hidden: kotlin pushes
+# an `extends` modifier and java does NOT -- java's modifiers read [] for
+# `class D extends A {}`, measured in section 1's shape. That marker is
+# kotlin's extractor's own invention. Restoring it is what #323 asks for, and
+# whether java should grow one is a separate question for whoever normalises
+# the modifiers vocabulary.
+query TB
+SELECT name, list_contains(modifiers, 'extends')
+FROM parse_ast(E'interface I\nopen class A\nclass D : A(), I {}\n', 'kotlin', context := 'native')
+WHERE type = 'class_declaration' AND name = 'D';
+----
+D	true
+
+query TB
+SELECT name, list_contains(modifiers, 'extends')
+FROM parse_ast('class A {} class D extends A {}', 'java', context := 'native')
+WHERE type = 'class_declaration' AND name = 'D';
+----
+D	false
+
+# =============================================================================
+# 3. The `by` delegation form, which a naive fix gets wrong
+# =============================================================================
+# `class D(impl: I) : I by impl` nests the supertype one level deeper:
+#
+#     delegation_specifier
+#       explicit_delegation
+#         user_type > type_identifier  I
+#         by
+#         simple_identifier            impl
+#
+# A fix that only corrects the plural-to-singular search finds the
+# delegation_specifier, sets has_extends, and then reads NO type name, because
+# explicit_delegation is not one of the shapes the type lookup knows. That
+# combination -- "has a supertype, cannot say which" -- is a worse answer than
+# either half, so it gets its own section.
+
+query TT
+SELECT name, list_transform(parameters, lambda p: p.name)::VARCHAR
+FROM parse_ast(E'interface I { fun f() }\nclass D(impl: I) : I by impl\n', 'kotlin', context := 'native')
+WHERE type = 'class_declaration' AND name = 'D';
+----
+D	[I]
+
+# =============================================================================
+# 4. Controls: the fix must not over-fire
+# =============================================================================
+# These were green BEFORE the fix and must stay green. A class with no
+# supertype has no delegation_specifier child at all, so it must report no
+# parents and no `extends`.
+
+query TTB
+SELECT name, list_transform(parameters, lambda p: p.name)::VARCHAR, list_contains(modifiers, 'extends')
+FROM parse_ast(E'open class A\ninterface I\n', 'kotlin', context := 'native')
+WHERE type = 'class_declaration' ORDER BY name;
+----
+A	[]	false
+I	[]	false
+
+# `open` still reaches the modifiers list, so the extends marker is additive
+# rather than a replacement.
+query TT
+SELECT name, modifiers::VARCHAR
+FROM parse_ast(E'open class A\n', 'kotlin', context := 'native')
+WHERE type = 'class_declaration';
+----
+A	[open]
+
+# A primary constructor is NOT a supertype. #263 gave primary_constructor its
+# own parameters; this pins that the class's own parents stay separate from them.
+query TT
+SELECT name, list_transform(parameters, lambda p: p.name)::VARCHAR
+FROM parse_ast(E'class Person(val name: String, val age: Int)\n', 'kotlin', context := 'native')
+WHERE type = 'class_declaration';
+----
+Person	[]
