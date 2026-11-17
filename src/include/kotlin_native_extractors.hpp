@@ -542,7 +542,33 @@ public:
 		return "class";
 	}
 
-	// Extract parent types from delegation_specifiers into parameters
+	// Extract parent types, one per delegation_specifier, into parameters.
+	//
+	// #323. tree-sitter-kotlin emits `delegation_specifier` -- SINGULAR -- as a
+	// DIRECT child of class_declaration, one per supertype, with no container
+	// between them. Measured on `class D : A(), I {}`:
+	//
+	//     class_declaration        D
+	//       class
+	//       type_identifier        D
+	//       :
+	//       delegation_specifier         <- A()
+	//         constructor_invocation
+	//           user_type > type_identifier  A
+	//       ,
+	//       delegation_specifier         <- I
+	//         user_type > type_identifier  I
+	//       class_body
+	//
+	// This loop used to look for `delegation_specifiers`, plural. The grammar has
+	// no such node: of its 136 named node types (263 entries counting anonymous
+	// ones) exactly three mention delegation -- constructor_delegation_call,
+	// delegation_specifier and explicit_delegation -- and none is plural. So the
+	// branch was dead and EVERY kotlin class reported no parent types.
+	//
+	// The second effect was quieter. has_extends is set only in here, so
+	// ExtractKotlinClassModifiers never pushed its `extends` marker either, and a
+	// kotlin class lost both its supertypes and the flag saying it had any.
 	static vector<ParameterInfo> ExtractParentTypes(TSNode node, const string &content, bool &has_extends) {
 		vector<ParameterInfo> parents;
 		has_extends = false;
@@ -550,28 +576,16 @@ public:
 		uint32_t child_count = ts_node_child_count(node);
 		for (uint32_t i = 0; i < child_count; i++) {
 			TSNode child = ts_node_child(node, i);
-			const char *child_type = ts_node_type(child);
+			if (strcmp(ts_node_type(child), "delegation_specifier") != 0) {
+				continue;
+			}
+			// The class HAS a supertype even where the name cannot be read, so
+			// this is set on the node and not on a successful name.
+			has_extends = true;
 
-			if (strcmp(child_type, "delegation_specifiers") == 0) {
-				has_extends = true;
-				// Extract each delegation_specifier
-				uint32_t spec_count = ts_node_child_count(child);
-				for (uint32_t j = 0; j < spec_count; j++) {
-					TSNode specifier = ts_node_child(child, j);
-					const char *spec_type = ts_node_type(specifier);
-
-					// Skip punctuation
-					if (strcmp(spec_type, ",") == 0 || strcmp(spec_type, ":") == 0) {
-						continue;
-					}
-
-					// Extract type from delegation_specifier or user_type
-					string type_name = ExtractTypeName(specifier, content);
-					if (!type_name.empty()) {
-						parents.push_back({type_name, ""});
-					}
-				}
-				break;
+			string type_name = ExtractTypeName(child, content);
+			if (!type_name.empty()) {
+				parents.push_back({type_name, ""});
 			}
 		}
 
@@ -594,6 +608,22 @@ public:
 
 			if (strcmp(child_type, "user_type") == 0 || strcmp(child_type, "simple_identifier") == 0) {
 				return ExtractNodeText(child, content);
+			} else if (strcmp(child_type, "explicit_delegation") == 0) {
+				// class D : I by impl -- the supertype is I, and `impl` is the
+				// object it delegates to. Measured:
+				//     delegation_specifier > explicit_delegation
+				//                              user_type > type_identifier  I
+				//                              by
+				//                              simple_identifier            impl
+				// Without this arm the delegating form sets has_extends and
+				// records NO parent, which is a worse answer than either.
+				uint32_t deleg_count = ts_node_child_count(child);
+				for (uint32_t j = 0; j < deleg_count; j++) {
+					TSNode deleg_child = ts_node_child(child, j);
+					if (strcmp(ts_node_type(deleg_child), "user_type") == 0) {
+						return ExtractNodeText(deleg_child, content);
+					}
+				}
 			} else if (strcmp(child_type, "constructor_invocation") == 0) {
 				// class Foo : Bar() - Bar is inside constructor_invocation
 				uint32_t constr_count = ts_node_child_count(child);

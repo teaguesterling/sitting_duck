@@ -371,8 +371,28 @@ string LanguageAdapter::FindIdentifierInWrappers(TSNode node, const string &cont
 	// object_elem pattern (object_elem -> expression -> variable_expr -> identifier).
 	// The depth limit and identifier-type filter constrain what gets matched, but if
 	// false positives appear in other languages, consider qualifying it further.
+	//
+	// THIS LIST IS SHARED BY EVERY LANGUAGE THAT DECLARES FIND_IDENTIFIER -- 24 of the
+	// language tables do -- so adding an entry needs its blast radius measured, not
+	// assumed. The denominator that matters is NOT the number of languages: this list is
+	// consulted by node-type NAME, so a type absent from a grammar can never match, and
+	// the descent only follows types that are IN the list.
+	//
+	// `rest_pattern` was measured both ways before it was added for #320:
+	//   * 4 of 30 grammars emit it at all (dart, javascript, typescript, tsx);
+	//   * of every node type that can OWN one, exactly one declares find_identifier --
+	//     `required_parameter`, in typescript and tsx. The rest declare none, so this
+	//     list is never consulted for them;
+	//   * the two-hop paths are blocked structurally. javascript's function_declaration
+	//     and variable_declarator, typescript's required_parameter and
+	//     variable_declarator and dart's pattern_variable_declaration all reach a
+	//     rest_pattern two levels down, but only through formal_parameters,
+	//     array_pattern, object_pattern or list_pattern -- and none of those is in this
+	//     list, so FindIdentifierInWrappers stops before it gets there.
+	// Net reach: one node type, two languages.
 	static const vector<string> wrapper_types = {
 	    "variable_declarator",             // JS, C#, TypeScript
+	    "rest_pattern",                    // TypeScript/tsx `...c: number[]` (#320)
 	    "variable_list",                   // Lua (inside assignment_statement)
 	    "assignment_statement",            // Lua (inside variable_declaration)
 	    "init_declarator",                 // C++

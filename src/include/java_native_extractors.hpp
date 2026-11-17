@@ -191,11 +191,43 @@ private:
 					param.type = content.substr(start, end - start) + "[]";
 				}
 			} else if (strcmp(child_type, "identifier") == 0) {
-				// Parameter name
+				// Parameter name, when the grammar puts it directly here.
 				uint32_t start = ts_node_start_byte(child);
 				uint32_t end = ts_node_end_byte(child);
 				if (start < content.length() && end <= content.length()) {
 					param.name = content.substr(start, end - start);
+				}
+			} else if (strcmp(child_type, "variable_declarator") == 0) {
+				// #319. tree-sitter-java does NOT put a varargs parameter's name
+				// in a direct identifier child. `int... d` parses as
+				//
+				//     spread_parameter
+				//       integral_type        int
+				//       ...
+				//       variable_declarator  d      <- the name is in here
+				//         identifier         d
+				//
+				// The arm above therefore found nothing, param.name stayed empty,
+				// and the `!param.name.empty()` guard in
+				// ExtractJavaParametersDirect discarded the whole parameter. A
+				// method declaring four parameters reported three, with no error.
+				//
+				// The AST ROW for spread_parameter is named correctly, because the
+				// FIND_IDENTIFIER strategy's wrapper list already carries
+				// variable_declarator. Only this extractor's private lookup missed
+				// it.
+				uint32_t sub_count = ts_node_child_count(child);
+				for (uint32_t j = 0; j < sub_count; j++) {
+					TSNode sub = ts_node_child(child, j);
+					if (strcmp(ts_node_type(sub), "identifier") != 0) {
+						continue;
+					}
+					uint32_t start = ts_node_start_byte(sub);
+					uint32_t end = ts_node_end_byte(sub);
+					if (start < content.length() && end <= content.length()) {
+						param.name = content.substr(start, end - start);
+					}
+					break;
 				}
 			}
 		}
