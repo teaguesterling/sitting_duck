@@ -240,3 +240,71 @@ check. That is a gap in the auditor, not a result about tsx.
   cannot match.
 - No `languages/tsx/tsx_types.def`. One entry in `javascript_types.def` reaches all
   three languages; a tsx-only table would be the only one in the tree.
+
+---
+
+## 7. What shipped
+
+Branch `feat/jsx-node-types`, from main `1a1daff`.
+
+| commit | what |
+|---|---|
+| `ede1d75` | this design, with the ruling open |
+| `103e50b` | the contract as a RED test, plus the twin fixtures |
+| `4fb1e21` | the seven declarations, the shared name helper, the regenerated reference |
+| `e174b2b` | the three ledgers that moved, each with its measured value |
+
+### The approved mapping, as implemented
+
+| raw_type | semantic_type | name | native | flags |
+|---|---|---|---|---|
+| `jsx_element` | `COMPUTATION_CALL` | CUSTOM | NONE | 0 |
+| `jsx_self_closing_element` | `COMPUTATION_CALL` | CUSTOM | NONE | 0 |
+| `jsx_opening_element` | `PARSER_DELIMITER` | CUSTOM | NONE | 0 |
+| `jsx_closing_element` | `PARSER_DELIMITER` | CUSTOM | NONE | 0 |
+| `jsx_attribute` | `NAME_ATTRIBUTE` | **CUSTOM** | NONE | 0 |
+| `jsx_namespace_name` | `NAME_QUALIFIED` | NODE_TEXT | NONE | 0 |
+| `jsx_expression` | `PARSER_CONSTRUCT` | NONE | NONE | 0 |
+
+### One deviation from the approved table
+
+`jsx_attribute` takes **CUSTOM**, not `FIND_PROPERTY`. A namespaced attribute
+puts its name in a `jsx_namespace_name`, not a `property_identifier`, so
+`FIND_PROPERTY` returns the empty string for `xlink:href`. The semantics the
+ruling settled are unchanged: `NAME_ATTRIBUTE`, and no definition flag. The
+shared helper already existed for the four element and tag types, so reading
+either child costs three lines. An empty name for a real attribute is the kind
+of silent gap this feature was written to remove.
+
+### Measured, after the change
+
+```
+test/sql/languages/jsx_node_types.test       All tests passed (209 assertions)
+test/sql/bugs/issue_222_shadowed_declarations All tests passed (92 assertions)
+test/sql/conformance/call_naming_conformance  All tests passed (221 assertions)
+test/sql/conformance/native_strategy_declarations  passed, unchanged (26)
+test/sql/conformance/capability_declarations       passed, unchanged (76)
+test/sql/ast_unparse.test                          passed, unchanged (49)
+scripts/check_def_type_tables.py             OK, 3846 entries, no duplicates
+scripts/generate_taxonomy.py                 no change
+scripts/audit_unreachable_declarations.py    0 unreachable of 3926 (was 3912)
+scripts/audit_leaf_text_gaps.py              no change
+conformance_kit.sh --languages javascript,typescript,tsx
+                                             ok=24 FAIL=0 dirty=0 void=0 UNDECL=0
+clang-format and format.py on jsx_name_extraction.hpp   clean
+```
+
+`make format-check` reports 398 files, which is **more files than exist** in
+`FORMAT_DIRS` (309). It is red on this tree for reasons that predate this work,
+and no CI job runs it — `.github/workflows/` holds no reference to
+`format-check` or `format.py`. The new header passes `format.py` when checked
+on its own, and `clang-format --style=file` changes nothing in it.
+
+### Two findings recorded and left alone
+
+  - `tracker/bugs/064` — the two adapters return different `modifiers` and
+    `signature_type` for byte-identical source, on four non-JSX node types.
+    Found by this feature's own whole-row comparison. Predates it.
+  - `tracker/bugs/065` — `tsx` is the only built-in language with no generated
+    reference page, because the generator reads `.def` tables and tsx owns none.
+    `audit_unreachable_declarations.py` is blind the same way.
