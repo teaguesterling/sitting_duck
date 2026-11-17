@@ -1,6 +1,6 @@
 # 058 — Declare the JSX node types
 
-**Status:** design, awaiting one ruling. No code written.
+**Status:** approved, stance A. Implementation in progress.
 **Branch:** `feat/jsx-node-types` (from main `1a1daff`).
 **Raised by:** Teague, 2026-11-14 — "let's properly define the node types", item 3 of
 four after PR #329 added the `tsx` language.
@@ -90,7 +90,13 @@ call, and the tests must assert a non-empty name in **both** languages.
 
 ---
 
-## 2. The ruling needed: is JSX markup, or is it code?
+## 2. The ruling: is JSX markup, or is it code?
+
+> **RULED 2026-11-16, Teague: stance A, code semantics.** A JSX element is a call
+> site and a JSX attribute is a named argument. Option A's table below is the
+> approved mapping. Scope stays as section 3 states it: declarations only, with no
+> `css_selectors.sql` change.
+
 
 Every mapping below follows from one choice, so it is one question.
 
@@ -118,7 +124,7 @@ HTML's mapping, `<div className="x" id="y">` adds two **variable definitions**
 named `className` and `id` to every component file, and they flow into the
 name-binding walk and the #222 shadowing ledger.
 
-### Option A — code semantics (recommended)
+### Option A — code semantics — **APPROVED**
 
 | raw_type | semantic_type | name | native | flags |
 |---|---|---|---|---|
