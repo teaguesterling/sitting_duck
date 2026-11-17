@@ -51,6 +51,7 @@ Example: `DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA`
 - [Assignment Operators](#assignment-operators)
 - [Modern Operators](#modern-operators)
 - [Type Constructs](#type-constructs)
+- [JSX](#jsx)
 - [Parser Errors](#parser-errors)
 
 ## Function Definitions
@@ -417,6 +418,22 @@ These are included for compatibility when parsing TypeScript-like constructs or 
 | `non_null_expression` | TYPE_REFERENCE | NONE | TypeScript-style types that appear in JavaScript parsing |
 | `type_arguments` | TYPE_GENERIC | NONE |  |
 | `type_assertion` | TYPE_REFERENCE | NONE |  |
+
+## JSX
+
+JSX elements, tags and attributes
+
+An element is a CALL SITE, because `<Foo/>` compiles to `React.createElement(Foo, ...)`. An attribute is a NAMED ARGUMENT, not a definition: html_types.def declares its `attribute` as DEFINITION_VARIABLE, but in JSX a prop is an argument, so it follows python's `keyword_argument`. These seven entries reach three languages, because typescript_types.def `#include`s this file and TSXAdapter takes TypeScript's node configs. The typescript rows are dead; its grammar emits no jsx node. Five types take CUSTOM because no generic strategy answers correctly: a tag is an identifier, a member_expression or a jsx_namespace_name, and FIND_IDENTIFIER returns `Foo` for `<Foo.Bar>` and `svg` for `<svg:circle>`. src/include/jsx_name_extraction.hpp holds the one helper both ExtractNodeName methods call. Native extraction is NONE throughout, so `parameters` stays empty for JSX.
+
+| Node Type | Semantic Type | Name Extraction | Description |
+|-----------|---------------|-----------------|-------------|
+| `jsx_element` | COMPUTATION_CALL | CUSTOM | JSX elements, tags and attributes |
+| `jsx_self_closing_element` | COMPUTATION_CALL | CUSTOM |  |
+| `jsx_opening_element` | PARSER_DELIMITER | CUSTOM |  |
+| `jsx_closing_element` | PARSER_DELIMITER | CUSTOM |  |
+| `jsx_attribute` | NAME_ATTRIBUTE | CUSTOM |  |
+| `jsx_namespace_name` | NAME_QUALIFIED | NODE_TEXT |  |
+| `jsx_expression` | PARSER_CONSTRUCT | NONE |  |
 
 ## Parser Errors
 

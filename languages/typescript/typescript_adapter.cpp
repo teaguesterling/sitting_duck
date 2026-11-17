@@ -2,6 +2,7 @@
 #include "unified_ast_backend_impl.hpp"
 #include "semantic_types.hpp"
 #include "node_config.hpp"
+#include "jsx_name_extraction.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/common/helper.hpp"
@@ -91,6 +92,13 @@ string TypeScriptAdapter::ExtractNodeName(TSNode node, const string &content) co
 				return ExtractNodeText(string_node, content);
 			}
 			return "";
+		}
+		// JSX names come from one shared helper, because .jsx takes
+		// JavaScriptAdapter::ExtractNodeName and .tsx takes TypeScriptAdapter's.
+		// The two classes are siblings and share nothing, and an unhandled CUSTOM
+		// strategy returns "" with no error. See jsx_name_extraction.hpp.
+		if (config->name_strategy == ExtractionStrategy::CUSTOM && strncmp(node_type_str, "jsx_", 4) == 0) {
+			return ExtractJSXName(node, content);
 		}
 		return ExtractByStrategy(node, content, config->name_strategy);
 	}
