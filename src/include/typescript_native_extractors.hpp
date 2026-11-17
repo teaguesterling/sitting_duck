@@ -110,7 +110,16 @@ public:
 				param = ExtractOptionalParameter(child, content);
 				is_valid_param = !param.name.empty();
 			} else if (strcmp(child_type, "rest_parameter") == 0) {
-				// Rest parameter: (...args: type[])
+				// DEAD ARM, kept and labelled rather than deleted. NONE of the
+				// javascript, typescript or tsx grammars emits a `rest_parameter`
+				// node: a rest parameter is a `required_parameter` holding a
+				// `rest_pattern`, handled in ExtractRequiredParameter above.
+				// Measured against all three node-types.json at 1a1daff.
+				//
+				// This arm is why #320 was filed against the identifier lookup
+				// rather than against the dispatch: the file LOOKS like it handles
+				// rest parameters. Leaving it live costs nothing and deleting it
+				// belongs with the dead-code inventory in #226.
 				param = ExtractRestParameter(child, content);
 				is_valid_param = !param.name.empty();
 			} else if (strcmp(child_type, "assignment_pattern") == 0) {
@@ -151,6 +160,45 @@ public:
 				}
 			} else if (strcmp(child_type, "type_annotation") == 0) {
 				param.type = ExtractTypeFromAnnotation(child, content);
+			} else if (strcmp(child_type, "rest_pattern") == 0) {
+				// #320. A rest parameter IS a required_parameter, so the dispatch
+				// reaches it, but its name is nested one level deeper:
+				//
+				//     required_parameter
+				//       rest_pattern
+				//         ...
+				//         identifier       c
+				//       type_annotation    : number[]
+				//
+				// The `identifier` arm above looks at DIRECT children only, so the
+				// name came back empty and the `!param.name.empty()` guard in
+				// ExtractTypeScriptParametersDirect discarded the whole parameter.
+				// A function declaring three parameters reported two, with no
+				// error. The type bound correctly the whole time, because
+				// type_annotation IS a direct child.
+				//
+				// THE `...` STAYS IN THE NAME. javascript produces `...c` for the
+				// same syntax (measured), and php (`$a`), ruby (`*c`) and swift
+				// (`_ a`) keep their own sigils too.
+				// parameter_binding_multilang.test section 2 pins that convention
+				// and says a decision to normalise it should move every language
+				// at once rather than letting typescript drift alone. The AST
+				// ROW's name stays `c`, without the sigil, which is also what
+				// javascript does.
+				param.is_variadic = true;
+				uint32_t rest_count = ts_node_child_count(child);
+				for (uint32_t j = 0; j < rest_count; j++) {
+					TSNode rest_child = ts_node_child(child, j);
+					if (strcmp(ts_node_type(rest_child), "identifier") != 0) {
+						continue;
+					}
+					uint32_t start = ts_node_start_byte(rest_child);
+					uint32_t end = ts_node_end_byte(rest_child);
+					if (start < content.length() && end <= content.length()) {
+						param.name = "..." + content.substr(start, end - start);
+					}
+					break;
+				}
 			} else if (strcmp(child_type, "accessibility_modifier") == 0) {
 				uint32_t start = ts_node_start_byte(child);
 				uint32_t end = ts_node_end_byte(child);

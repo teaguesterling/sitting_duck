@@ -373,6 +373,7 @@ string LanguageAdapter::FindIdentifierInWrappers(TSNode node, const string &cont
 	// false positives appear in other languages, consider qualifying it further.
 	static const vector<string> wrapper_types = {
 	    "variable_declarator",             // JS, C#, TypeScript
+	    "rest_pattern",                    // TypeScript/tsx `...c: number[]` (#320)
 	    "variable_list",                   // Lua (inside assignment_statement)
 	    "assignment_statement",            // Lua (inside variable_declaration)
 	    "init_declarator",                 // C++
