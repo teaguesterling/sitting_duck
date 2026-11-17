@@ -82,14 +82,14 @@ E	[A<String>, Comparable<E>]
 # kotlin's extractor's own invention. Restoring it is what #323 asks for, and
 # whether java should grow one is a separate question for whoever normalises
 # the modifiers vocabulary.
-query TB
+query TT
 SELECT name, list_contains(modifiers, 'extends')
 FROM parse_ast(E'interface I\nopen class A\nclass D : A(), I {}\n', 'kotlin', context := 'native')
 WHERE type = 'class_declaration' AND name = 'D';
 ----
 D	true
 
-query TB
+query TT
 SELECT name, list_contains(modifiers, 'extends')
 FROM parse_ast('class A {} class D extends A {}', 'java', context := 'native')
 WHERE type = 'class_declaration' AND name = 'D';
@@ -127,7 +127,7 @@ D	[I]
 # supertype has no delegation_specifier child at all, so it must report no
 # parents and no `extends`.
 
-query TTB
+query TTT
 SELECT name, list_transform(parameters, lambda p: p.name)::VARCHAR, list_contains(modifiers, 'extends')
 FROM parse_ast(E'open class A\ninterface I\n', 'kotlin', context := 'native')
 WHERE type = 'class_declaration' ORDER BY name;

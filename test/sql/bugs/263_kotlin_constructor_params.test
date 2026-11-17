@@ -263,28 +263,33 @@ WHERE type = 'function_declaration';
 # parameters. The half of this that #263 must not break is that the
 # constructor's own parameter `n` does not leak onto the class. It does not.
 #
-# --- #323: but it should read ['B'], and it never has -----------------------
+# --- #323: FIXED, and this row is the one that predicted it ----------------
 # This expectation was written as a PREDICTION rather than a measurement, and
-# measuring it is how #323 was found. ExtractParentTypes
-# (kotlin_native_extractors.hpp:373) searches for a `delegation_specifiers`
-# child -- PLURAL -- and grammars/tree-sitter-kotlin/src/node-types.json has no
-# such node among its 263. The emitted node is `delegation_specifier`,
+# measuring it is how #323 was found. ExtractParentTypes searched for a
+# `delegation_specifiers` child -- PLURAL -- and
+# grammars/tree-sitter-kotlin/src/node-types.json has no such node among its
+# 263 entries (136 of them named). The emitted node is `delegation_specifier`,
 # singular, a direct child of `class_declaration`, and two supertypes produce
-# two siblings rather than one container. So EVERY kotlin class reports no
-# parents, and `has_extends` stays false, so the `extends` marker is lost too.
+# two siblings rather than one container. So EVERY kotlin class reported no
+# parents, and `has_extends` stayed false, so the `extends` marker was lost too.
 #
 # Independent of #263: the grammar evidence stands on its own, the same empty
-# answer comes back for a class with NO primary constructor, and java extracts
+# answer came back for a class with NO primary constructor, and java extracts
 # the identical relationship correctly (control below).
 #
-# Pinned at today's wrong value, so fixing #323 makes this fail.
+# It was pinned at the wrong value so that fixing #323 would make it fail. It
+# did, on 2026-11-16, and this is the corrected value. The row still does its
+# #263 job: `[B]` is the SUPERTYPE, and the constructor's own parameter `n`
+# still does not leak onto the class.
+# test/sql/bugs/323_kotlin_parent_types.test covers the rest, including the
+# `by` delegation form and the controls against over-firing.
 
 query II
 SELECT list_transform(parameters, lambda p: p.name)::VARCHAR AS parents, signature_type AS sigt
 FROM parse_ast(E'open class B(val n: Int)\nclass D(n: Int) : B(n)\n', 'kotlin', context := 'native')
 WHERE type = 'class_declaration' AND name = 'D';
 ----
-[]	class
+[B]	class
 
 # The control that makes #323 a kotlin defect rather than a missing feature:
 # java puts its supertype in `parameters` exactly as CLASS_WITH_METHODS

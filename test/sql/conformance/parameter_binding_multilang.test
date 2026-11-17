@@ -193,18 +193,25 @@ WHERE type = 'function_definition';
 ----
 ['a : int', 'b : char*', 'param : int', 'arr : int[]']
 
-# --- #319: java drops a varargs parameter ---------------------------------
-# `int... d` parses as `spread_parameter`, which java_types.def:183 DOES
-# declare, and whose AST row carries the correct name `d`. The function's
-# extractor iterates `formal_parameter` only, so the parameter never reaches
-# the list. That is the #220 shape: a dispatch that does not know a node the
-# grammar emits.
+# --- #319: java varargs -- FIXED, and the filed cause was wrong -----------
+# `int... d` parses as `spread_parameter`, which java_types.def:183 declares and
+# whose AST row carries the correct name `d`.
+#
+# The issue says the extractor iterates `formal_parameter` only. It does not:
+# java_native_extractors.hpp has had a `spread_parameter` arm all along, and it
+# fires. What dropped the parameter was the `!param.name.empty()` guard beside
+# it, because ExtractSpreadParameter looked for a DIRECT `identifier` child and
+# the grammar nests the name inside a `variable_declarator`. Measured 2026-11-16.
+#
+# The type reads `int[]`, which is what the existing code already computed and
+# never got to use. #319 suggests `int...`; that is a convention question for
+# section 2's list, not part of this fix.
 query I
 SELECT list_transform(parameters, lambda p: coalesce(nullif(p.name,''),'<e>') || ' : ' || coalesce(nullif(p.type,''),'-'))::VARCHAR
 FROM parse_ast(E'class K {\n  void probe(int a, String[] b, java.util.Map<String,Integer> c, int... d) {}\n}\n', 'java', context := 'native')
 WHERE type = 'method_declaration';
 ----
-['a : int', 'b : String[]', 'c : java.util.Map<String,Integer>']
+['a : int', 'b : String[]', 'c : java.util.Map<String,Integer>', 'd : int[]']
 
 # The control that proves the node and its name exist, and that only the list
 # is short: the AST row for the dropped parameter is named correctly.
@@ -215,25 +222,40 @@ WHERE type IN ('formal_parameter', 'spread_parameter') ORDER BY name;
 formal_parameter	a
 spread_parameter	d
 
-# --- #320: typescript drops a rest parameter ------------------------------
-# `...c: number[]` IS a `required_parameter`, so the dispatch reaches it, but
-# its name sits inside a `rest_pattern` wrapper and the identifier lookup does
-# not descend into one. The same nested-name class as #318.
+# --- #320: typescript rest parameter -- FIXED in two places ---------------
+# `...c: number[]` IS a `required_parameter`, so the dispatch reaches it, and
+# its name sits inside a `rest_pattern` wrapper.
+#
+# TWO layers had to change, which the issue does not say. Adding `rest_pattern`
+# to FindIdentifierInWrappers fixes the AST ROW's name (it now reads `c`), and
+# that alone left this list still short: the typescript native extractor has its
+# OWN lookup, which also read direct children only. Measured 2026-11-16, with
+# the row fixed and the list still wrong.
+#
+# The file also carries a DEAD `rest_parameter` dispatch arm -- no grammar here
+# emits that node -- which is why the issue was filed against the lookup rather
+# than the dispatch. It is labelled in place now.
+#
+# The `...` stays in the name, as javascript already does for the same syntax.
+# See section 2: four languages keep their sigils, and normalising them is one
+# decision for all of them.
 query I
 SELECT list_transform(parameters, lambda p: coalesce(nullif(p.name,''),'<e>') || ' : ' || coalesce(nullif(p.type,''),'-'))::VARCHAR
 FROM parse_ast(E'function probe(a: number, b: string = "x", ...c: number[]) {}\n', 'typescript', context := 'native')
 WHERE type = 'function_declaration';
 ----
-['a : number', 'b : string']
+['a : number', 'b : string', '...c : number[]']
 
-# The control: the node is present and its name is EMPTY, which is why the
-# caller's guard drops it.
+# The control that located the second layer. Before the fix BOTH rows read
+# `<empty>` for the rest parameter; after the wrapper-list change the row is
+# named `c` while the parameters list above was still short. That split is what
+# proved the extractor keeps its own lookup.
 query TT
 SELECT type, coalesce(nullif(name,''),'<empty>') FROM parse_ast('function probe(a: number, ...c: number[]) {}', 'typescript')
 WHERE type = 'required_parameter' ORDER BY node_id;
 ----
 required_parameter	a
-required_parameter	<empty>
+required_parameter	c
 
 # --- 059 phase 1: the arity and the names, which the SOURCE fixes ---------
 # The three assertions below assert only what the declared source determines:
@@ -259,14 +281,14 @@ SELECT len(parameters), list_transform(parameters, lambda p: coalesce(nullif(p.n
 FROM parse_ast(E'function probe(a: number, b: string = "x", ...c: number[]) {}\n', 'typescript', context := 'native')
 WHERE type = 'function_declaration';
 ----
-3	[a, b, c]
+3	[a, b, ...c]
 
 query IT
 SELECT len(parameters), list_transform(parameters, lambda p: coalesce(nullif(p.name,''),'<e>'))::VARCHAR
 FROM parse_ast(E'function probe(a: number, ...c: number[]) {}\n', 'tsx', context := 'native')
 WHERE type = 'function_declaration';
 ----
-2	[a, c]
+2	[a, ...c]
 
 # --- #321: a csharp `params` parameter has no node to read ----------------
 # This one is NOT a dispatch gap. tree-sitter-c-sharp emits ONE `parameter`
