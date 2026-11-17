@@ -1,11 +1,14 @@
 # 059 — The parameter-extraction cluster: eight issues, four causes
 
-**Status:** plan, awaiting approval. No code written.
+**Status:** phase 1 implemented. Phases 2 to 4 still plan only.
+**Phase 1 branch:** `fix/319-320-nested-parameter-names` (#319, #320, #323).
+**Phase 1 corrected four claims in this plan.** Section 7 holds them, and the
+corrections are applied in place above, so no section below contradicts it.
 **Scope chosen by:** Teague, 2026-11-16, from four candidate clusters among the
 47 open issues.
 **Issues:** #316, #317, #319, #320, #321, #322, #323, #324, and #255 on a
 separate axis.
-**Branch:** none yet. Phase 1 would branch from main.
+**Branch:** phase 1 branched from main at `c8d48d7`.
 **Every figure below was measured against `build/release/duckdb` at `1f3939f`,
 not taken from the issue bodies.** Two issue bodies turned out to be wrong, and
 that is the first finding.
@@ -74,8 +77,17 @@ Both lose the last parameter, and nothing marks the list as partial. This is
 the worst of the four causes for a caller, because arity is silently short: a
 query counting parameters gets a wrong number with no error.
 
-**#319 and #320 are one defect in two languages.** No issue says so, because
-#319's filed cause pointed elsewhere.
+**#319 and #320 are one SHAPE in two languages, not one fix.** No issue says
+so, because #319's filed cause pointed elsewhere. The two need different layers:
+java's wrapper is handled inside `ExtractSpreadParameter`, because
+`variable_declarator` was **already** in `FindIdentifierInWrappers`'s list and
+the java path never consults it; typescript's needs both a new
+`ExtractRequiredParameter` arm and a new entry in that list. Measured during
+phase 1, after this section was first written.
+
+**tsx carries #320 as well, and no issue says so.** `TSXAdapter` inherits
+`TypeScriptAdapter`'s node configs, so the same signature reported 1 parameter
+in tsx where typescript reported 2.
 
 ### S2 — the extractor names node types instead of following grammar fields
 
@@ -192,9 +204,9 @@ belong to `tracker/bugs/042` step 5 and are out of scope here.
 
 | phase | issues | why grouped | size |
 |---|---|---|---|
-| **1** | #319, #320 | one defect, two languages, measured here for the first time. Fixes silently-short arity, the worst symptom in the cluster | small |
+| **1** | #319, #320, #323 | #319/#320 share a shape and fix silently-short arity, the worst symptom in the cluster. #323 joined on Teague's instruction, 2026-11-16: it is also S4-shaped and also one wrong node-type name | small |
 | **2** | #317, #324, #321's `ref` half | all S2, all through `declarator_walk.hpp`, after promoting the two type-text helpers into it | medium |
-| **3** | #323, #316 | both S4. #323 is one word plus its `has_extends` effect; #316 needs diagnosis and a bigger lambda fixture first | medium |
+| **3** | #316 | S4. Needs diagnosis and a bigger lambda fixture before any fix. #323 moved to phase 1 | medium |
 | **4** | #322, #255, #321's `params` half | a new zig extractor; a user-visible schema widening; one upstream report | large, and separable |
 
 **Recommended start: phase 1.** It is the smallest change, it fixes the symptom
@@ -225,13 +237,26 @@ Option 1's blast radius is the thing to measure before choosing: that wrapper
 list serves `FIND_IDENTIFIER` for every language that declares it. The source
 comment beside the strategy puts its reach at "FIND_IDENTIFIER's 206 node
 types" — that is the repo's own figure, not one I measured — so a wrapper added
-there can change names well outside java and typescript. Measured here:
+there can change names well outside java and typescript.
 **24 of the language tables declare `FIND_IDENTIFIER`**
 (`grep -c FIND_IDENTIFIER languages/*/*.def`, counting files with a non-zero
-count), so option 1 reaches 24 languages to fix two. Option 2 is narrower but duplicates walk logic a third time.
+count).
 
-**That measurement is phase 1's first task, and its result decides the fix.**
-I will not choose between them from the issue text.
+**"24 languages to fix two" was the wrong denominator, and this plan said it
+first.** The list is consulted by node-type NAME, so a type absent from a
+grammar can never match it. Measured in phase 1:
+
+  - 4 of 30 grammars emit `rest_pattern` at all: dart, javascript, typescript,
+    tsx;
+  - of every node type that can own one, exactly one declares
+    `find_identifier`: `required_parameter`, in typescript and tsx;
+  - every two-hop path is blocked structurally, because each one passes through
+    `formal_parameters`, `array_pattern`, `object_pattern` or `list_pattern`,
+    and none of those is in the list.
+
+Net reach: one node type, two languages. **Option 1 was chosen on that
+measurement**, and the measurement now lives beside the list in
+`src/language_adapter.cpp`, where the next person adding a wrapper will read it.
 
 ---
 
@@ -243,3 +268,73 @@ I will not choose between them from the issue text.
     SQL until #255 is taken.
   - No work on #250 (dart/graphql calls), which the baseline file lists beside
     this cluster but which is a different subsystem.
+
+---
+
+## 7. Phase 1, as built
+
+Branch `fix/319-320-nested-parameter-names`, four commits on main at `c8d48d7`:
+red-first tests, the fix, the expectations the fix invalidated, and the
+blast-radius note. Implementation and expectations never moved in the same
+commit.
+
+### Behaviour, measured before and after
+
+| language | case | before | after |
+|---|---|---|---|
+| java | `void m(int a, int b, int... d)` | 3 params | 4 params, `d : int[]` |
+| typescript | `f(a: string, b: number, ...c: number[])` | 2 params | 3 params, `...c : number[]` |
+| tsx | the same signature | 1 param | 2 params, `...c` |
+| kotlin | `class D : A(), I` | `[]` | `[A, I]` |
+| kotlin | `class D : I by impl` | `[]` | `[I]` |
+| kotlin | the `extends` modifier | never set | set when the class has a parent |
+
+Two of those six rows are in no issue: the tsx row, and the `by` delegation
+form.
+
+### Four claims in this plan that phase 1 corrected
+
+  1. **#319 and #320 are not one fix.** Same shape, different layers.
+     `variable_declarator` was already in the shared wrapper list, so java
+     needed its extractor changed and typescript needed both layers. Corrected
+     in section 2, S1.
+  2. **"24 languages to fix two" used the wrong denominator.** The measured
+     reach is one node type in two languages. Corrected in section 5.
+  3. **#323 is not one word.** The plural-to-singular change alone passes a
+     naive test and still fails `class D : I by impl`, because that form nests
+     the type inside an `explicit_delegation` node. `ExtractTypeName` needed an
+     arm for it. Section 3 of the test file exists to catch exactly that
+     partial fix.
+  4. **#320 reaches tsx as well as typescript**, through adapter inheritance,
+     and no issue says so.
+
+### The through-line
+
+All three issue bodies named a cause that was not there, and in each case the
+code looked like it handled the input it was dropping: java's
+`spread_parameter` arm, typescript's `rest_parameter` arm for a node type the
+grammar never emits, and kotlin's `delegation_specifiers`. Re-running the repro
+found each one. Reading the diagnosis did not.
+
+### Two conventions recorded, not changed
+
+  - **The `extends` marker is kotlin's convention alone.** Kotlin pushes
+    `extends` into `modifiers`; java's modifiers read `[]` for
+    `class D extends A {}` and java instead stores the inheritance kind in
+    `ParameterInfo.type` as `extends` or `implements`. Both are asserted in
+    `test/sql/bugs/323_kotlin_parent_types.test`, in both directions, so a
+    later change that unifies them has to say it meant to.
+  - **The kotlin grammar has 136 named node types**, or 263 entries counting
+    anonymous ones. Three mention delegation and none is plural. The larger
+    figure is the one easily mistaken for a node-type count.
+
+### Verification
+
+`parameter_binding_multilang.test` 42 assertions, `323_kotlin_parent_types.test`
+30, `263_kotlin_constructor_params.test` 38. A 33-file sweep over the bug and
+language tests for the affected languages found one failure, `263`, since fixed
+and verified. The two `require-env` conformance files pass with
+`SITTING_DUCK_TEST_GRAMMAR_DIR` set, 66 and 76 assertions, rather than skipping.
+Full suite on longbottom: `All tests passed (10777 assertions in 201 test
+cases)`, taken before the rebase onto `c8d48d7`. CI on the pull request is the
+gate for the rebased tree.
