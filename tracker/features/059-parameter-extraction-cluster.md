@@ -172,7 +172,11 @@ digests a row moves. It belongs in its own pull request, not folded into a fix.
 
 ---
 
-## 4. The two ledgers every fix must move
+## 4. The ledgers every fix must move
+
+**Section 4 was written as "the two ledgers". There are three.** Phase 1 found
+the third in CI, not locally, because `scripts/verify_native_dispatch.py` is a
+workflow step and not part of `make test`. A full green suite cannot see it.
 
 Both already exist, and both fail loudly when a fix lands. That is by design,
 and it is why this cluster is tractable.
@@ -193,6 +197,18 @@ cpp   function_declarator  L3   #324's node: "a gap in the extractor rather than
 cpp   lambda_expression    L3   #316, seen=1 -- one observation
 dart  method_signature     L3   #250, adjacent, not in this cluster
 ```
+
+**`spec/abi/module-abi.yaml`, the `dead_dispatch` list** (68 rows before phase
+1, 67 after). It records every dispatch literal that no grammar emits, keyed on
+`(check, language, literal)` and not on a line number. Its contract is
+bidirectional in the same way: the gate fails on a new dead literal **and** on a
+baselined one the run no longer reproduces. #323 deleted
+`kotlin / delegation_specifiers`, so that row had to go in the same change.
+
+This list also decides how a dead arm may be retired. Phase 1 labelled
+typescript's `rest_parameter` arm in place rather than deleting it, so its row
+at `dead_dispatch` still reproduces and the baseline stays honest. Deleting the
+arm would have required deleting the row with it.
 
 The 13 `L5` rows are **not** extractor gaps. They are declarations on
 argument/parameter container nodes, which no implementation can satisfy; they
@@ -338,3 +354,11 @@ and verified. The two `require-env` conformance files pass with
 Full suite on longbottom: `All tests passed (10777 assertions in 201 test
 cases)`, taken before the rebase onto `c8d48d7`. CI on the pull request is the
 gate for the rebased tree.
+
+**CI caught one thing the green suite could not.** `module ABI in sync` failed
+on `1 stale baseline entry`: `spec/abi/module-abi.yaml` still listed
+`kotlin / delegation_specifiers` as a dead dispatch literal, which #323 had
+just deleted. The row is now removed, and `verify_native_dispatch.py` reports
+`67 known-dead literal(s) still exactly as spec/abi/module-abi.yaml records
+them, and no new ones`. The lesson is in section 4: that gate is a workflow
+step, so a local `make test` run can never reach it.

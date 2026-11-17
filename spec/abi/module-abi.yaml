@@ -322,7 +322,6 @@ native_extraction:
     - {check: dispatch, language: go, literal: "primitive_type"}   # go_native_extractors.hpp:63
     - {check: dispatch, language: java, literal: "primitive_type"}   # java_native_extractors.hpp:16
     - {check: dispatch, language: kotlin, literal: "default_value"}   # kotlin_native_extractors.hpp:191
-    - {check: dispatch, language: kotlin, literal: "delegation_specifiers"}   # kotlin_native_extractors.hpp:555
     - {check: dispatch, language: kotlin, literal: "enum_class_declaration"}   # kotlin_native_extractors.hpp:495
     - {check: dispatch, language: kotlin, literal: "interface_declaration"}   # kotlin_native_extractors.hpp:491
     - {check: dispatch, language: kotlin, literal: "type"}   # kotlin_native_extractors.hpp:51
