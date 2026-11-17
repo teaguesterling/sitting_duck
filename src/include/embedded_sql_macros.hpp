@@ -3695,6 +3695,10 @@ CREATE OR REPLACE MACRO ast_select_from(
                    fin.name AS pseudo_arg_name,    -- a `#name` inside the args (e.g. :is-scope(.fn#foo))
                    fpv.name AS pseudo_arg_plain,   -- an unquoted plain_value (e.g. the `function#foo` footgun)
                    pargs.args_id IS NOT NULL AS has_arg_block,  -- `:calls()` vs bare `:calls` (#191)
+                   -- #337: the whole :nth-child() argument text (An+B is one plain_value,
+                   -- or a plain_value plus more nodes for the unsupported "of S" form).
+                   CASE WHEN cn.name = 'nth-child'
+                        THEN regexp_extract(pcs.name, '.*:nth-child\(([^()]*)\)$', 1) END AS nth_arg,
                    false as negated
             FROM sel_pseudo_classes pcs
             JOIN sel_class_names cn ON cn.parent_id = pcs.node_id
@@ -3717,6 +3721,8 @@ CREATE OR REPLACE MACRO ast_select_from(
                    fin.name AS pseudo_arg_name,
                    fpv.name AS pseudo_arg_plain,
                    pargs.args_id IS NOT NULL AS has_arg_block,
+                   CASE WHEN cn.name = 'nth-child'
+                        THEN regexp_extract(pcs.name, '.*:nth-child\(([^()]*)\)$', 1) END AS nth_arg,
                    true as negated
             FROM sel_pseudo_classes pcs
             JOIN sel_class_names cn ON cn.parent_id = pcs.node_id
@@ -3763,13 +3769,31 @@ CREATE OR REPLACE MACRO ast_select_from(
                    pseudo_arg_plain,
                    has_arg_block,
                    negated,
+                   nth_arg,
+                   -- #337: :nth-child(An+B) as (nth_a, nth_b). NULL = not An+B, which
+                   -- nth_child_validation raises on. Whitespace is dropped first.
+                   CASE WHEN nth_norm IN ('odd', 'even') THEN 2
+                        WHEN regexp_full_match(nth_norm, '[+-]?[0-9]+') THEN 0
+                        WHEN regexp_full_match(nth_norm, '[+-]?[0-9]*n([+-][0-9]+)?')
+                        THEN CASE regexp_extract(nth_norm, '^([+-]?[0-9]*)n', 1)
+                                 WHEN '' THEN 1 WHEN '+' THEN 1 WHEN '-' THEN -1
+                                 ELSE CAST(regexp_extract(nth_norm, '^([+-]?[0-9]*)n', 1) AS INTEGER)
+                             END
+                   END AS nth_a,
+                   CASE WHEN nth_norm = 'odd' THEN 1
+                        WHEN nth_norm = 'even' THEN 0
+                        WHEN regexp_full_match(nth_norm, '[+-]?[0-9]+') THEN CAST(nth_norm AS INTEGER)
+                        WHEN regexp_full_match(nth_norm, '[+-]?[0-9]*n([+-][0-9]+)?')
+                        THEN COALESCE(TRY_CAST(NULLIF(regexp_extract(nth_norm, 'n([+-][0-9]+)$', 1), '') AS INTEGER), 0)
+                   END AS nth_b,
                    -- Key for pc_hits below. Ordered over every column so it is the
                    -- same wherever this CTE is planned; identical rows may swap ids,
                    -- which is harmless because identical rows have identical hits.
                    row_number() OVER (ORDER BY pseudo_name, pseudo_arg, pseudo_arg_class,
                                                pseudo_arg_name, pseudo_arg_plain,
-                                               has_arg_block, negated) AS pc_id
-            FROM pseudo_classes_raw
+                                               has_arg_block, negated, nth_arg) AS pc_id
+            FROM (SELECT *, lower(regexp_replace(nth_arg, '\s', '', 'g')) AS nth_norm
+                  FROM pseudo_classes_raw)
         ),
 
         -- Detect whether func_apply extension is loaded (provides function_exists)
@@ -3872,6 +3896,9 @@ CREATE OR REPLACE MACRO ast_select_from(
         -- Zero-arity pseudo-classes: an argument is an ERROR, not something to ignore (#184).
         -- Before this, `.fn:typed(None)` and `.fn:decorated(by="property")` parsed, ran, and
         -- returned the BARE result -- a deliberately nonsense argument behaved exactly like a
+
+)SQLMACRO"
+        R"SQLMACRO(
         -- plausible one, so the mistake was unobservable at runtime and the caller got a
         -- superset that looked like a reasonable answer. pseudo_class_validation above catches
         -- an unknown NAME; this catches a known name handed an argument it cannot read.
@@ -3903,9 +3930,6 @@ CREATE OR REPLACE MACRO ast_select_from(
                     'ast_select: :{} takes no argument. {}',
                     (SELECT name FROM zero_arity_offender),
                     CASE (SELECT name FROM zero_arity_offender)
-
-)SQLMACRO"
-        R"SQLMACRO(
                         WHEN 'typed' THEN 'It tests only WHETHER a type annotation is present. '
                                           'To filter on the type itself use the attribute form, '
                                           'e.g. [signature="None"] or [signature*="int"].'
@@ -4103,6 +4127,9 @@ CREATE OR REPLACE MACRO ast_select_from(
                       AND ac.attr_name NOT IN (SELECT name FROM known_attribute_names)
                 ) THEN error(format(
                     'ast_select: unknown attribute "[{}...]". Supported attributes: '
+
+)SQLMACRO"
+        R"SQLMACRO(
                     'name, type, language, semantic, modifier, annotation, qualified, '
                     'signature, params, peek, receiver, file, line.',
                     (SELECT ac.attr_name FROM attr_conditions ac
@@ -4132,9 +4159,6 @@ CREATE OR REPLACE MACRO ast_select_from(
                 ) THEN error(
                     'ast_select: attribute "modifier" supports = and *= (both meaning '
                     '"has this modifier" — modifiers is a list), not ^= or $=.'
-
-)SQLMACRO"
-        R"SQLMACRO(
                 )
                 ELSE true
             END AS ok
@@ -4317,6 +4341,21 @@ CREATE OR REPLACE MACRO ast_select_from(
         -- (pseudo_classes_raw, not_has_conditions). Anything else -- an attribute
         -- filter, a combinator -- used to be dropped silently, so the :not()
         -- excluded nothing. Reject it.
+        -- #337: an :nth-child() argument that is not An+B (or the "of S" form)
+        -- used to match nothing, silently. Reject it.
+        nth_child_validation AS (
+            SELECT CASE
+                WHEN EXISTS (SELECT 1 FROM pseudo_classes
+                             WHERE pseudo_name = 'nth-child' AND nth_a IS NULL)
+                THEN error(format(
+                    'ast_select: :nth-child({}) is not supported. Write an integer, odd, '
+                    'even, or An+B such as 2n+1 (issue #337). The "of S" form is not '
+                    'supported.',
+                    (SELECT COALESCE(nth_arg, '...') FROM pseudo_classes
+                     WHERE pseudo_name = 'nth-child' AND nth_a IS NULL LIMIT 1)))
+                ELSE true
+            END AS ok
+        ),
         not_args_validation AS (
             SELECT CASE
                 WHEN EXISTS (
@@ -4330,6 +4369,9 @@ CREATE OR REPLACE MACRO ast_select_from(
                     '#330). Filter it in SQL over the result, or chain ast_select calls.',
                     (SELECT f.item_text FROM sel_arg_item_filters f
                      JOIN sel_class_names cn ON cn.parent_id = f.pcs_id AND cn.name = 'not'
+
+)SQLMACRO"
+        R"SQLMACRO(
                      JOIN sel_pcs_outside_any_args outside ON outside.pcs_id = f.pcs_id
                      WHERE NOT f.simple AND f.item_type <> 'pseudo_class_selector'
                      ORDER BY f.item_id LIMIT 1)))
@@ -4380,9 +4422,6 @@ CREATE OR REPLACE MACRO ast_select_from(
         --   :contains("code") — some descendant IS the pattern root (any depth)
         -- Both share the same parsed pattern. Only the first :match/:contains
         -- occurrence in a selector is extracted (one pattern per selector).
-
-)SQLMACRO"
-        R"SQLMACRO(
         -- Exact structural match: db.execute() matches only zero-arg calls,
         -- db.execute("SELECT 1") matches only that exact call.
         -- Use ___ (triple underscore) as wildcard for any name.
@@ -4585,6 +4624,9 @@ CREATE OR REPLACE MACRO ast_select_from(
                       AND r.node_id <= a.node_id + a.descendant_count
                       AND r.node_id + (SELECT len FROM ast_pattern_len) - 1
                           <= a.node_id + a.descendant_count
+
+)SQLMACRO"
+        R"SQLMACRO(
             WHERE pc.pseudo_name = 'contains'
 
             UNION ALL
@@ -4636,9 +4678,6 @@ CREATE OR REPLACE MACRO ast_select_from(
             JOIN ast sib ON sib.type = pc.pseudo_arg
             JOIN ast a ON a.file_path = sib.file_path
                       AND a.parent_id = sib.parent_id
-
-)SQLMACRO"
-        R"SQLMACRO(
                       AND sib.sibling_index < a.sibling_index
             WHERE pc.pseudo_name = 'follows'
         ),
@@ -4673,6 +4712,12 @@ CREATE OR REPLACE MACRO ast_select_from(
                     AND NOT (n.node_id < r.node_id
                              AND n.node_id + n.descendant_count >= r.node_id + r.descendant_count))
               )
+              -- #337: tree-sitter-css splits a negative B (`3n-1`) into a plain_value
+              -- and an ERROR inside :nth-child()'s arguments. nth_child_validation
+              -- checks the whole argument text, so the ERROR is not stray here.
+              AND (n.type <> 'ERROR' OR COALESCE(n.parent_id, -1) NOT IN (
+                  SELECT ab.node_id FROM sel_arg_blocks ab
+                  JOIN sel_class_names cn ON cn.parent_id = ab.parent_id AND cn.name = 'nth-child'))
               -- Pseudo-elements (::callers, ::parent-definition, ...) are legitimate
               -- post-match transforms; keep them out of the stray check even if a
               -- future parse shape puts them beside sel_root_raw.
@@ -4778,6 +4823,7 @@ CREATE OR REPLACE MACRO ast_select_from(
                  AND (SELECT ok FROM pseudo_element_validation)
                  AND (SELECT ok FROM has_args_validation)
                  AND (SELECT ok FROM not_args_validation)
+                 AND (SELECT ok FROM nth_child_validation)
                  AND (SELECT ok FROM combinator_validation)
                  AND (SELECT ok FROM selector_list_validation)
                  AND (SELECT ok FROM parse_completeness_validation)) as validations_ok
@@ -4821,6 +4867,9 @@ CREATE OR REPLACE MACRO ast_select_from(
         SELECT a.*
         FROM ast a, sel_props sp
         WHERE sp.validations_ok
+
+)SQLMACRO"
+        R"SQLMACRO(
           AND sp.sel_type = 'selectors'
           AND (a.file_path, a.node_id) IN (
               SELECT a2.file_path, a2.node_id FROM ast a2, list_filters f
@@ -4892,9 +4941,6 @@ CREATE OR REPLACE MACRO ast_select_from(
           AND (sp.right_type IS NULL OR a.type = sp.right_type)
           AND (sp.right_class IS NULL
                OR (is_semantic_type(a.semantic_type, UPPER(sp.right_class))
-
-)SQLMACRO"
-        R"SQLMACRO(
                    AND NOT is_syntax_only(a.flags)))
           AND (sp.right_id IS NULL OR a.name = sp.right_id)
           AND EXISTS (
@@ -5079,6 +5125,9 @@ CREATE OR REPLACE MACRO ast_select_from(
             WHEN ac.attr_name = 'receiver' THEN
                 CASE ac.attr_op WHEN '*=' THEN a.receiver LIKE '%' || ac.attr_value_esc || '%' ESCAPE '\'
                                 WHEN '^=' THEN a.receiver LIKE ac.attr_value_esc || '%' ESCAPE '\'
+
+)SQLMACRO"
+        R"SQLMACRO(
                                 WHEN '$=' THEN a.receiver LIKE '%' || ac.attr_value_esc ESCAPE '\'
                                 ELSE a.receiver = ac.attr_value END
 
@@ -5132,15 +5181,16 @@ CREATE OR REPLACE MACRO ast_select_from(
         -- pseudo-class's precomputed hit set (pc_hits, above).
         LEFT JOIN pc_hits h
           ON h.pc_id = pc.pc_id AND h.file_path = a.file_path AND h.node_id = a.node_id
-
-)SQLMACRO"
-        R"SQLMACRO(
         WHERE pc.negated = COALESCE(CASE pc.pseudo_name
 
             -- Standard CSS positional pseudo-classes
             WHEN 'first-child' THEN a.sibling_index = 0
             WHEN 'last-child' THEN h.pc_id IS NOT NULL  -- pc_hits
-            WHEN 'nth-child' THEN a.sibling_index = CAST(pc.pseudo_arg AS INTEGER) - 1
+            -- #337: p = A*n + B for some n >= 0, where p = sibling_index + 1.
+            -- (p - B) * A >= 0 is "n >= 0" without integer division.
+            WHEN 'nth-child' THEN CASE WHEN pc.nth_a = 0 THEN a.sibling_index + 1 = pc.nth_b
+                                       ELSE (a.sibling_index + 1 - pc.nth_b) % pc.nth_a = 0
+                                            AND (a.sibling_index + 1 - pc.nth_b) * pc.nth_a >= 0 END
             WHEN 'empty' THEN a.children_count = 0
             WHEN 'root' THEN a.depth = 0
 
@@ -5296,6 +5346,9 @@ CREATE OR REPLACE MACRO ast_select_from(
 
     -- =====================================================================
     -- Pseudo-element dispatch: navigate FROM matched nodes to related nodes
+
+)SQLMACRO"
+        R"SQLMACRO(
     -- =====================================================================
 
     -- The matched nodes (before pseudo-element transformation)
@@ -5366,9 +5419,6 @@ CREATE OR REPLACE MACRO ast_select_from(
     pe_call_sites AS (
         SELECT DISTINCT call_node.* FROM matched m
         JOIN ast call_node ON call_node.file_path = m.file_path
-
-)SQLMACRO"
-        R"SQLMACRO(
           AND call_node.semantic_type = 'COMPUTATION_CALL'
           AND call_node.name = m.name
           AND call_node.node_id != m.node_id

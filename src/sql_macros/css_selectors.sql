@@ -800,6 +800,10 @@ CREATE OR REPLACE MACRO ast_select_from(
                    fin.name AS pseudo_arg_name,    -- a `#name` inside the args (e.g. :is-scope(.fn#foo))
                    fpv.name AS pseudo_arg_plain,   -- an unquoted plain_value (e.g. the `function#foo` footgun)
                    pargs.args_id IS NOT NULL AS has_arg_block,  -- `:calls()` vs bare `:calls` (#191)
+                   -- #337: the whole :nth-child() argument text (An+B is one plain_value,
+                   -- or a plain_value plus more nodes for the unsupported "of S" form).
+                   CASE WHEN cn.name = 'nth-child'
+                        THEN regexp_extract(pcs.name, '.*:nth-child\(([^()]*)\)$', 1) END AS nth_arg,
                    false as negated
             FROM sel_pseudo_classes pcs
             JOIN sel_class_names cn ON cn.parent_id = pcs.node_id
@@ -822,6 +826,8 @@ CREATE OR REPLACE MACRO ast_select_from(
                    fin.name AS pseudo_arg_name,
                    fpv.name AS pseudo_arg_plain,
                    pargs.args_id IS NOT NULL AS has_arg_block,
+                   CASE WHEN cn.name = 'nth-child'
+                        THEN regexp_extract(pcs.name, '.*:nth-child\(([^()]*)\)$', 1) END AS nth_arg,
                    true as negated
             FROM sel_pseudo_classes pcs
             JOIN sel_class_names cn ON cn.parent_id = pcs.node_id
@@ -868,13 +874,31 @@ CREATE OR REPLACE MACRO ast_select_from(
                    pseudo_arg_plain,
                    has_arg_block,
                    negated,
+                   nth_arg,
+                   -- #337: :nth-child(An+B) as (nth_a, nth_b). NULL = not An+B, which
+                   -- nth_child_validation raises on. Whitespace is dropped first.
+                   CASE WHEN nth_norm IN ('odd', 'even') THEN 2
+                        WHEN regexp_full_match(nth_norm, '[+-]?[0-9]+') THEN 0
+                        WHEN regexp_full_match(nth_norm, '[+-]?[0-9]*n([+-][0-9]+)?')
+                        THEN CASE regexp_extract(nth_norm, '^([+-]?[0-9]*)n', 1)
+                                 WHEN '' THEN 1 WHEN '+' THEN 1 WHEN '-' THEN -1
+                                 ELSE CAST(regexp_extract(nth_norm, '^([+-]?[0-9]*)n', 1) AS INTEGER)
+                             END
+                   END AS nth_a,
+                   CASE WHEN nth_norm = 'odd' THEN 1
+                        WHEN nth_norm = 'even' THEN 0
+                        WHEN regexp_full_match(nth_norm, '[+-]?[0-9]+') THEN CAST(nth_norm AS INTEGER)
+                        WHEN regexp_full_match(nth_norm, '[+-]?[0-9]*n([+-][0-9]+)?')
+                        THEN COALESCE(TRY_CAST(NULLIF(regexp_extract(nth_norm, 'n([+-][0-9]+)$', 1), '') AS INTEGER), 0)
+                   END AS nth_b,
                    -- Key for pc_hits below. Ordered over every column so it is the
                    -- same wherever this CTE is planned; identical rows may swap ids,
                    -- which is harmless because identical rows have identical hits.
                    row_number() OVER (ORDER BY pseudo_name, pseudo_arg, pseudo_arg_class,
                                                pseudo_arg_name, pseudo_arg_plain,
-                                               has_arg_block, negated) AS pc_id
-            FROM pseudo_classes_raw
+                                               has_arg_block, negated, nth_arg) AS pc_id
+            FROM (SELECT *, lower(regexp_replace(nth_arg, '\s', '', 'g')) AS nth_norm
+                  FROM pseudo_classes_raw)
         ),
 
         -- Detect whether func_apply extension is loaded (provides function_exists)
@@ -1416,6 +1440,21 @@ CREATE OR REPLACE MACRO ast_select_from(
         -- (pseudo_classes_raw, not_has_conditions). Anything else -- an attribute
         -- filter, a combinator -- used to be dropped silently, so the :not()
         -- excluded nothing. Reject it.
+        -- #337: an :nth-child() argument that is not An+B (or the "of S" form)
+        -- used to match nothing, silently. Reject it.
+        nth_child_validation AS (
+            SELECT CASE
+                WHEN EXISTS (SELECT 1 FROM pseudo_classes
+                             WHERE pseudo_name = 'nth-child' AND nth_a IS NULL)
+                THEN error(format(
+                    'ast_select: :nth-child({}) is not supported. Write an integer, odd, '
+                    'even, or An+B such as 2n+1 (issue #337). The "of S" form is not '
+                    'supported.',
+                    (SELECT COALESCE(nth_arg, '...') FROM pseudo_classes
+                     WHERE pseudo_name = 'nth-child' AND nth_a IS NULL LIMIT 1)))
+                ELSE true
+            END AS ok
+        ),
         not_args_validation AS (
             SELECT CASE
                 WHEN EXISTS (
@@ -1766,6 +1805,12 @@ CREATE OR REPLACE MACRO ast_select_from(
                     AND NOT (n.node_id < r.node_id
                              AND n.node_id + n.descendant_count >= r.node_id + r.descendant_count))
               )
+              -- #337: tree-sitter-css splits a negative B (`3n-1`) into a plain_value
+              -- and an ERROR inside :nth-child()'s arguments. nth_child_validation
+              -- checks the whole argument text, so the ERROR is not stray here.
+              AND (n.type <> 'ERROR' OR COALESCE(n.parent_id, -1) NOT IN (
+                  SELECT ab.node_id FROM sel_arg_blocks ab
+                  JOIN sel_class_names cn ON cn.parent_id = ab.parent_id AND cn.name = 'nth-child'))
               -- Pseudo-elements (::callers, ::parent-definition, ...) are legitimate
               -- post-match transforms; keep them out of the stray check even if a
               -- future parse shape puts them beside sel_root_raw.
@@ -1871,6 +1916,7 @@ CREATE OR REPLACE MACRO ast_select_from(
                  AND (SELECT ok FROM pseudo_element_validation)
                  AND (SELECT ok FROM has_args_validation)
                  AND (SELECT ok FROM not_args_validation)
+                 AND (SELECT ok FROM nth_child_validation)
                  AND (SELECT ok FROM combinator_validation)
                  AND (SELECT ok FROM selector_list_validation)
                  AND (SELECT ok FROM parse_completeness_validation)) as validations_ok
@@ -2227,7 +2273,11 @@ CREATE OR REPLACE MACRO ast_select_from(
             -- Standard CSS positional pseudo-classes
             WHEN 'first-child' THEN a.sibling_index = 0
             WHEN 'last-child' THEN h.pc_id IS NOT NULL  -- pc_hits
-            WHEN 'nth-child' THEN a.sibling_index = CAST(pc.pseudo_arg AS INTEGER) - 1
+            -- #337: p = A*n + B for some n >= 0, where p = sibling_index + 1.
+            -- (p - B) * A >= 0 is "n >= 0" without integer division.
+            WHEN 'nth-child' THEN CASE WHEN pc.nth_a = 0 THEN a.sibling_index + 1 = pc.nth_b
+                                       ELSE (a.sibling_index + 1 - pc.nth_b) % pc.nth_a = 0
+                                            AND (a.sibling_index + 1 - pc.nth_b) * pc.nth_a >= 0 END
             WHEN 'empty' THEN a.children_count = 0
             WHEN 'root' THEN a.depth = 0
 

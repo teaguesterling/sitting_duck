@@ -1,0 +1,135 @@
+# name: test/sql/ast_select_nth_child.test
+# group: [sql]
+
+# Issue #337: :nth-child() takes the CSS An+B forms, not only an integer.
+#
+# Before the fix (measured on main 1a1daff): only an integer argument worked.
+# odd, even and every An+B form returned 0 rows, silently.
+#
+# Contract (CSS Selectors Level 4, "An+B"):
+#   - The position p is 1-based: sibling_index + 1. It counts every sibling,
+#     syntax tokens included, the same as :nth-child(3) did before.
+#   - :nth-child(An+B) matches when p = A*n + B for some integer n >= 0.
+#   - odd = 2n+1, even = 2n. Spaces around the sign are allowed. Upper-case
+#     keywords raise, because the CSS grammar rejects them (see below).
+#   - An argument that is not An+B, and the "of S" form, raise an error
+#     that names :nth-child(. They never return 0 rows silently.
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+statement ok
+CREATE TABLE nc AS SELECT * FROM read_ast('test/data/python/selectors/nth_child.py');
+
+# Fixture facts: f1..f6 are the module's only children, positions 1..6.
+query I
+SELECT string_agg(name || '@' || (sibling_index + 1), ',' ORDER BY node_id)
+FROM ast_select_from('nc', '.func');
+----
+f1@1,f2@2,f3@3,f4@4,f5@5,f6@6
+
+# --- The integer form keeps working ---
+
+query I
+SELECT string_agg(name, ',' ORDER BY node_id) FROM ast_select_from('nc', '.func:nth-child(3)');
+----
+f3
+
+# --- Keywords ---
+
+query I
+SELECT string_agg(name, ',' ORDER BY node_id) FROM ast_select_from('nc', '.func:nth-child(odd)');
+----
+f1,f3,f5
+
+query I
+SELECT string_agg(name, ',' ORDER BY node_id) FROM ast_select_from('nc', '.func:nth-child(even)');
+----
+f2,f4,f6
+
+# CSS says keywords are case-insensitive, but tree-sitter-css rejects ODD: it
+# builds no pseudo-class node. That raises the parse-coverage error, not 0 rows.
+statement error
+SELECT * FROM ast_select_from('nc', '.func:nth-child(ODD)');
+----
+malformed selector
+
+# --- An+B ---
+
+query I
+SELECT string_agg(name, ',' ORDER BY node_id) FROM ast_select_from('nc', '.func:nth-child(2n+1)');
+----
+f1,f3,f5
+
+query I
+SELECT string_agg(name, ',' ORDER BY node_id) FROM ast_select_from('nc', '.func:nth-child( 2n + 1 )');
+----
+f1,f3,f5
+
+query I
+SELECT string_agg(name, ',' ORDER BY node_id) FROM ast_select_from('nc', '.func:nth-child(2n)');
+----
+f2,f4,f6
+
+query I
+SELECT string_agg(name, ',' ORDER BY node_id) FROM ast_select_from('nc', '.func:nth-child(3n)');
+----
+f3,f6
+
+query I
+SELECT string_agg(name, ',' ORDER BY node_id) FROM ast_select_from('nc', '.func:nth-child(3n-1)');
+----
+f2,f5
+
+query I
+SELECT string_agg(name, ',' ORDER BY node_id) FROM ast_select_from('nc', '.func:nth-child(n+4)');
+----
+f4,f5,f6
+
+query I
+SELECT string_agg(name, ',' ORDER BY node_id) FROM ast_select_from('nc', '.func:nth-child(n)');
+----
+f1,f2,f3,f4,f5,f6
+
+# A negative A counts down from B: the first B positions.
+query I
+SELECT string_agg(name, ',' ORDER BY node_id) FROM ast_select_from('nc', '.func:nth-child(-n+3)');
+----
+f1,f2,f3
+
+query I
+SELECT string_agg(name, ',' ORDER BY node_id) FROM ast_select_from('nc', '.func:nth-child(-2n+5)');
+----
+f1,f3,f5
+
+# A = 0 is a single position.
+query I
+SELECT string_agg(name, ',' ORDER BY node_id) FROM ast_select_from('nc', '.func:nth-child(0n+2)');
+----
+f2
+
+# --- Inside :not(), and through the path form ---
+
+query I
+SELECT string_agg(name, ',' ORDER BY node_id) FROM ast_select_from('nc', '.func:not(:nth-child(odd))');
+----
+f2,f4,f6
+
+query I
+SELECT count(*) FROM ast_select('test/data/python/selectors/nth_child.py', '.func:nth-child(even)');
+----
+3
+
+# --- An argument that is not An+B raises instead of matching nothing ---
+
+statement error
+SELECT * FROM ast_select_from('nc', '.func:nth-child(n+)');
+----
+:nth-child(
+
+statement error
+SELECT * FROM ast_select_from('nc', '.func:nth-child(2n+1 of .func)');
+----
+:nth-child(
