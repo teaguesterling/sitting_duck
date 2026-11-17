@@ -51,14 +51,25 @@ SELECT name FROM ast_select('src/*.py', 'function_definition:first-child');
 SELECT name FROM ast_select('src/*.js', 'method_definition:last-child');
 ```
 
-### `:nth-child(n)`
+### `:nth-child(An+B)`
 
-1-based position among siblings:
+1-based position among siblings. The position counts every sibling, syntax
+tokens included. The argument takes the CSS An+B forms: an integer, `odd`,
+`even`, or `An+B` such as `2n+1`, `3n-1` or `-n+3`. A node matches when its
+position equals A*n + B for some integer n >= 0.
 
 ```sql
 -- Second function definition
 SELECT name FROM ast_select('src/*.py', 'function_definition:nth-child(2)');
+-- Every other top-level statement, starting with the first
+SELECT name FROM ast_select('src/*.py', 'module > *:nth-child(odd)');
+-- The first three siblings
+SELECT name FROM ast_select('src/*.py', 'function_definition:nth-child(-n+3)');
 ```
+
+Any other argument raises an error. This includes the `of S` form
+(`:nth-child(2n+1 of .func)`) and upper-case keywords such as `ODD`, which
+the CSS grammar rejects.
 
 ### `:empty`
 
@@ -709,7 +720,7 @@ This is useful in environments where you can't install community extensions, or 
 | **Positional** | |
 | `:first-child` | First among siblings |
 | `:last-child` | Last among siblings |
-| `:nth-child(n)` | Nth sibling (1-based) |
+| `:nth-child(An+B)` | Sibling position (1-based): an integer, `odd`, `even`, or An+B |
 | `:empty` | No children |
 | `:root` | Top-level node (depth 0) |
 | **Structural** | |
