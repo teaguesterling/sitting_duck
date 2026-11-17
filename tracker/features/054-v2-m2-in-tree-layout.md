@@ -1,16 +1,19 @@
 # 054 — M2: the in-tree `core/` + `languages/<lang>/` layout
 
-**Status:** stages 0–2 EXECUTED 2026-11-03. Stage 3 deliberately not started.
-Written 2026-11-03 as a plan; §10 records what executing it measured.
+**Status:** stages 0–3 are all merged. **Stage 4, the `core/` directory, is
+still owed** — ruled by Teague on 2026-11-17 — so M2 is not complete and
+`v2.0.0-alpha` is not one stage away. Written 2026-11-03 as a plan; §10 records
+what executing it measured, and §11 the 2026-11-17 re-measurement.
 
 Teague approved "stages 0–2, stop before the macro split".
 
 | stage | state | landed as |
 |---|---|---|
 | 0 — the invariance gate | merged | PR #306, `8cc5827` |
-| 1 — `git mv` to `languages/<lang>/` | open | PR #307, `8532350` `7e5fa17` `b96e588` |
-| 2 — `module.cmake` per language | open | PR #307, `525e083` `6037b17` |
-| 3 — the macro split | **not started, by decision** | — |
+| 1 — `git mv` to `languages/<lang>/` | merged | PR #307, `8532350` `7e5fa17` `b96e588` |
+| 2 — `module.cmake` per language | merged | PR #307, `525e083` `6037b17` |
+| 3 — the macro split | merged | `691de8b`, an ancestor of main; `src/sql_macros/tree_analysis.sql` |
+| 4 — the `core/` directory | **open, still owed** | — (ruled 2026-11-17; see §11) |
 
 **Scope source:** `docs/planning/v2-architecture.md` "Migration sequencing", M2.
 `tracker/features/044-v2-m1-contract.md:262` makes M2 the next action.
@@ -314,9 +317,50 @@ absorbed, which is the whole point of a floor.
 
 ### 10f. Still open
 
-- **Stage 3 (the macro split) is not started**, by decision. §7 says why: "core
-  accessors vs add-ons" is not written down anywhere as a list, and it changes
-  which macros a default build registers, which is visible to every user.
+- ~~**Stage 3 (the macro split) is not started**, by decision.~~ **Superseded
+  2026-11-17: stage 3 merged.** `691de8b` is an ancestor of main and
+  `src/sql_macros/tree_analysis.sql` is on main. The list §7 called unwritten is
+  now `057` §7. What is still open is stage 4, the `core/` directory — see §11.
 - §9's unknowns about the registry descriptor build are still unmeasured.
 - The kit's runtime on the v2.0 line: the clean run completed, so the "may now
   be a long job" worry in §9 is answered for the in-tree case.
+
+## 11. Re-measured 2026-11-17: three stages landed, `core/` never did
+
+Measured with `git ls-tree` against `origin/main` at `183b37d`. The tree was read
+rather than the status lines, because the status lines were the subject.
+
+| RFC piece | state | measured how |
+|---|---|---|
+| grammar submodules replace vendored copies | DONE | 27 `[submodule "grammars/tree-sitter-*"]` sections; zero `third_party/tree-sitter-*` |
+| `module.cmake` per language | DONE | 29 `module.cmake` files; `cmake/BuiltinLanguages.cmake` declares none itself |
+| macro split | DONE | 14 `.sql` files; `tree_analysis.sql` present |
+| `core/` + `languages/<lang>/` | **HALF** | `languages/` is 33 directories; **`core/` does not exist** |
+
+`src/` still holds the engine. Two files remain under `src/language_adapters/`:
+`dynamic_language_adapter.cpp`, which is engine code and belongs there, and
+`duckdb_adapter_backup.cpp`, which no CMake file references. The second is a dead
+file and a candidate for #226.
+
+**Ruling — Teague, 2026-11-17: the `core/` half is still owed.** M2 is not
+complete, and `v2.0.0-alpha` waits on it. The stage has no plan yet. Moving the
+engine out of `src/` is a large refactor, so it needs its own approved plan
+before any file moves.
+
+### 11a. Why three status lines were wrong at the same time
+
+One cause, not three: **tracker status is not updated when a branch merges.**
+
+- This file's stage table read "open" for work that PR #307 merged, and "not
+  started" for a stage that is on main.
+- `057`'s header read "No code written" for work that had shipped.
+- `048`'s authoritative language-count cell read 28 where the tree declares 29.
+
+`PRIORITIES.md` shows the pattern is already known: it carries its own
+supersession note listing three statements that went false.
+
+The M3 gate is unaffected, and it is measurable rather than a judgement:
+`spec/abi/module-abi.yaml` has changed 8 times since 2026-10-30 and declares
+`version: 1.0.0` at every one of them. But the split-after-stability rule measures
+stability across a *full milestone*, and no `v2.0.0-alpha` tag exists, so that
+interval still has only one end.

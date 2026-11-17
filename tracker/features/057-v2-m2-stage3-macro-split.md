@@ -1,8 +1,9 @@
 # 057 — M2 stage 3: the SQL macro split (duckling core vs add-ons)
 
-**Status:** specced, awaiting Teague's approval. No code written. The
-`superpowers:brainstorming` hard gate applies: nothing is built until this
-document is approved.
+**Status:** approved and IMPLEMENTED. `691de8b` is an ancestor of main, and
+`src/sql_macros/tree_analysis.sql` is on main. This header read "No code written"
+until 2026-11-17, which was false from the moment the work merged; `054` §11a
+records the pattern. The design below is kept as approved.
 
 **Measured on:** `main` at `821af42`, 2026-11-10. DuckDB binary
 `.worktrees/perf/decorrelate-pseudo-classes/build/release/duckdb`, reporting
