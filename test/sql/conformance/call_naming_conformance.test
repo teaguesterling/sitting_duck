@@ -85,7 +85,7 @@ go	2	2
 graphql	1	1
 hcl	2	1
 java	3	3
-javascript	3	2
+javascript	5	4
 kotlin	2	2
 lua	2	2
 php	4	4
@@ -95,10 +95,20 @@ ruby	3	3
 rust	2	2
 sql	4	4
 swift	2	2
-tsx	4	2
-typescript	4	2
+tsx	6	4
+typescript	6	4
 zig	2	2
 
+# THREE COUNTS GREW IN 058, and all three grew for one reason: javascript
+# 3 -> 5, tsx 4 -> 6, typescript 4 -> 6. jsx_element and
+# jsx_self_closing_element are now COMPUTATION_CALL with a CUSTOM name
+# strategy, because `<Foo/>` compiles to `React.createElement(Foo, ...)` and a
+# component usage IS a call site (tracker/features/058-jsx-node-types.md).
+# Both new types also extract a name, so naming_types grows with call_types
+# and the two columns stay two apart in each row. typescript's pair moves with
+# the others although its grammar emits no jsx node, because its table
+# #includes javascript's -- the same sibling rule #222 is about.
+#
 # FOUR COUNTS SHRANK IN #232, and the shrink is the point: css 8 -> 1,
 # ruby 5 -> 3, rust 4 -> 3, sql 5 -> 4. Those languages declared
 # call-semantic node types their grammars cannot emit -- css declared seven
@@ -186,7 +196,8 @@ calls AS (
     FROM read_ast(['test/data/unparse_leaf_text/*', 'test/data/call_extraction/*',
                    'test/data/languages/java/*', 'test/data/lua/simple.lua',
                    'test/data/conformance/kotlin_constructors.kt',
-                   'test/data/conformance/sql_calls.sql'],
+                   'test/data/conformance/sql_calls.sql',
+                   'test/data/jsx/shapes.jsx', 'test/data/tsx/shapes.tsx'],
                   ignore_errors := true)
     WHERE is_semantic_type(semantic_type, 'CALL') AND NOT is_syntax_only(flags)
 )
@@ -203,7 +214,7 @@ cpp	1	0
 csharp	3	0
 go	12	0
 java	16	0
-javascript	13	0
+javascript	20	1
 kotlin	7	0
 lua	17	0
 php	6	0
@@ -213,9 +224,26 @@ ruby	2	0
 rust	17	0
 sql	7	0
 swift	4	0
+tsx	7	1
 typescript	1	0
 zig	2	0
 
+# 058 ADDS THE TWO JSX FIXTURES TO THIS GLOB, and that is the point of adding
+# them: jsx_element and jsx_self_closing_element are now call-semantic types
+# with a CUSTOM name strategy, and before this edit NO fixture in reach of this
+# check held a single jsx node. A gate that cannot see the types it governs is
+# not a gate.
+#
+# THE ONE UNNAMED ROW IN EACH IS A FRAGMENT, and it is correct. `<>...</>` is a
+# jsx_element whose jsx_opening_element holds only the two angle brackets, so
+# it has no tag and no callee. Naming it would be an invented answer. It is
+# pinned as 1 rather than excluded, in the same spirit as bash's
+# command_substitution above, so that a SECOND unnamed JSX call -- a real
+# naming regression -- fails this check instead of hiding behind an exclusion.
+# javascript went 13 -> 20 and tsx joins at 7, both from
+# test/data/jsx/shapes.jsx and test/data/tsx/shapes.tsx, which are
+# byte-identical: 7 call-semantic jsx nodes each, 6 named and 1 the fragment.
+#
 # The former failures, pinned by node type and row so a PARTIAL fix is visible.
 # Now empty: no naming-declared call node in these three fixtures is unnamed.
 # An empty expectation would be vacuous on its own (it is also what a query

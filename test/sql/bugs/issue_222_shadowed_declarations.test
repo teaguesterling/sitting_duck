@@ -162,12 +162,24 @@ SELECT (SELECT count(*) FROM ast_type_map('javascript')
 # typescript delta is the sibling rule working in the additive direction -- one
 # line in javascript's file, two languages changed, because
 # typescript_types.def #includes it.
+#
+# 058 moved them again, the same way and by seven: javascript 202 -> 209,
+# typescript 294 -> 301. The seven are the JSX node types the tsx language
+# brought in with #329 and nothing classified -- jsx_element,
+# jsx_self_closing_element, jsx_opening_element, jsx_closing_element,
+# jsx_attribute, jsx_namespace_name and jsx_expression. All seven are
+# UNREACHABLE for typescript, whose grammar emits no jsx node, and reachable
+# for javascript and tsx. That is the sibling rule's cost: one table serves
+# three languages, so a type only two of them have is declared for all three.
 query II
 SELECT (SELECT count(*) FROM ast_type_map('javascript')) AS js,
        (SELECT count(*) FROM ast_type_map('typescript')) AS ts;
 ----
-202	294
+209	301
 
+# 058 adds its seven here too, for the same reason: 294 -> 301. tsx is the
+# language that NEEDS those seven, and it is the one with no table.
+#
 # And the same +1 reaches tsx, which has no table of its own at all: TSXAdapter
 # inherits TypeScriptAdapter's. Pinned here because this file is where the
 # sibling rule is checked, and tsx is a THIRD consumer of javascript's file --
@@ -177,4 +189,4 @@ SELECT (SELECT count(*) FROM ast_type_map('tsx')) AS tsx,
        (SELECT count(*) FROM ast_type_map('tsx')) = (SELECT count(*) FROM ast_type_map('typescript')) AS matches_typescript,
        (SELECT count(*) FROM ast_type_map('tsx') WHERE node_type = 'using_declaration') AS has_using_declaration;
 ----
-294	true	1
+301	true	1

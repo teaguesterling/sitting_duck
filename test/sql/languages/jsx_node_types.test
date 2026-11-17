@@ -226,21 +226,52 @@ WHERE type = 'jsx_expression' AND name IS NOT NULL AND name != '';
 
 # =============================================================================
 # THE TWO ADAPTERS AGREE. The strongest form of the #329 guard: every row of
-# the .jsx fixture equals the matching row of the byte-identical .tsx fixture,
-# for every column but the ones that must differ (language and the path).
+# the .jsx fixture equals the matching row of the byte-identical .tsx fixture.
+#
+# TWO COLUMNS ARE EXCLUDED, AND NOT BECAUSE THEY ARE INCONVENIENT. `modifiers`
+# and `signature_type` come from each adapter's own native context extraction,
+# and the two adapters legitimately disagree there. This was measured, not
+# assumed -- the unrestricted comparison returned 72 rows, every one of them on
+# those two columns and none of them on a jsx node:
+#
+#     type                 js modifiers  tsx modifiers              js sig  tsx sig
+#     identifier(div)      []            [in_jsx_opening_element]   NULL    identifier
+#     property_identifier  []            [property]                 NULL    property
+#     variable_declarator  []            []                         const   NULL
+#
+# So TypeScript's extractor fills them and JavaScript's mostly does not, and
+# `variable_declarator`'s signature_type runs the other way. That divergence
+# predates this feature and is pinned in its own right below, so excluding the
+# columns here hides nothing.
 # =============================================================================
 
 query I
 SELECT (SELECT count(*) FROM (
-          SELECT * EXCLUDE (language, file_path) FROM read_ast('test/data/jsx/shapes.jsx')
+          SELECT * EXCLUDE (language, file_path, modifiers, signature_type) FROM read_ast('test/data/jsx/shapes.jsx')
           EXCEPT ALL
-          SELECT * EXCLUDE (language, file_path) FROM read_ast('test/data/tsx/shapes.tsx')))
+          SELECT * EXCLUDE (language, file_path, modifiers, signature_type) FROM read_ast('test/data/tsx/shapes.tsx')))
      + (SELECT count(*) FROM (
-          SELECT * EXCLUDE (language, file_path) FROM read_ast('test/data/tsx/shapes.tsx')
+          SELECT * EXCLUDE (language, file_path, modifiers, signature_type) FROM read_ast('test/data/tsx/shapes.tsx')
           EXCEPT ALL
-          SELECT * EXCLUDE (language, file_path) FROM read_ast('test/data/jsx/shapes.jsx')));
+          SELECT * EXCLUDE (language, file_path, modifiers, signature_type) FROM read_ast('test/data/jsx/shapes.jsx')));
 ----
 0
+
+# The excluded divergence, pinned. Four node types, 36 rows, NO jsx node among
+# them. A jsx row appearing here would mean the two adapters' native extraction
+# had started to disagree about JSX, which this phase declares NONE for.
+query TI
+SELECT j.type, count(*) AS rows_differing
+FROM read_ast('test/data/jsx/shapes.jsx') j
+JOIN read_ast('test/data/tsx/shapes.tsx') t USING (node_id)
+WHERE j.modifiers IS DISTINCT FROM t.modifiers
+   OR j.signature_type IS DISTINCT FROM t.signature_type
+GROUP BY 1 ORDER BY 1;
+----
+identifier	22
+member_expression	2
+property_identifier	6
+variable_declarator	6
 
 # =============================================================================
 # ast_select('div') STILL DOES NOT REACH JSX, and that is this phase's declared
