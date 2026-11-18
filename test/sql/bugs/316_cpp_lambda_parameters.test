@@ -1,0 +1,165 @@
+# name: test/sql/bugs/316_cpp_lambda_parameters.test
+# description: C++ lambdas deliver their parameters (#316), across seven lambda forms
+# group: [bugs]
+
+# WHY THIS FILE EXISTS
+#
+# #316 reported that C++ lambdas report zero parameters. By the time anyone
+# re-ran it the behaviour was correct, and nobody could say when it started
+# working, because the issue never established a cause.
+#
+# THE REAL DEFECT WAS THE EVIDENCE, NOT THE CODE. #316's row in
+# spec/conformance/native-decl-baseline.tsv read `seen=1`: ONE lambda in the
+# whole conformance corpus. A single observation decided a cross-language claim,
+# and no fixture existed to contradict it. The row later stopped reproducing and
+# nothing noticed, because nothing runs scripts/conformance_kit.sh.
+#
+# So this file is breadth, on purpose. Seven lambda forms, not one. Any future
+# change that handles the plain form and breaks a harder one fails here instead
+# of hiding behind a `seen=1` measurement.
+#
+# WHY THESE SEVEN. Each one stresses a different part of the walk from the
+# lambda to its parameter list:
+#
+#   plain                 the baseline
+#   capture by reference  a capture clause sits between the declarator and the
+#                         parameter list
+#   generic auto          the type is `auto` / `auto&&`, not a named type
+#   trailing return type  `-> double` follows the parameter list
+#   mutable, no params    a specifier follows an EMPTY parameter list
+#   immediately invoked   there is no enclosing declarator, so no name exists
+#   template parameters   `[]<typename T>(...)` puts a template list first
+#
+# HOW TO READ A FAILURE HERE
+#
+#   Section 1 fails  -> the `parameters` column itself broke. A plain function
+#                       is the control, so this is not about lambdas.
+#   Section 2 fails  -> an enclosing function and its lambda stopped reporting
+#                       their OWN lists. That is #324's bug class: the wrong
+#                       candidate sits next to the right one.
+#   Section 3 fails  -> read which form. A regression on `generic` or `template`
+#                       means the walk assumes a named type or no template list.
+#   Section 4 fails  -> something is being INVENTED for a lambda that genuinely
+#                       takes no parameters.
+#   Section 5 fails  -> the name column changed. An immediately-invoked lambda
+#                       has no name, and an empty string there is correct.
+
+require sitting_duck
+
+# =============================================================================
+# 1. The control: a plain C++ function, which has always been correct
+# =============================================================================
+# First, because every assertion below reads the same column. If `parameters` is
+# broken for ordinary functions then a lambda failure says nothing about
+# lambdas.
+
+query TTT
+SELECT type, name, list_transform(parameters, lambda p: p.name || ' : ' || p.type)::VARCHAR
+FROM parse_ast('int plain(int a, const char* s) { return a; }', 'cpp', context := 'native')
+WHERE type = 'function_definition';
+----
+function_definition	plain	['a : int', 's : const char*']
+
+# =============================================================================
+# 2. A lambda inside a function: each reports its OWN list
+# =============================================================================
+# This is the shape #324 gets wrong on function-pointer returns -- an outer node
+# carrying an inner node's parameter list. Here the enclosing function takes
+# `q` and the lambda takes `d`, and neither may report the other's.
+
+query TTT
+SELECT type, name, list_transform(parameters, lambda p: p.name || ' : ' || p.type)::VARCHAR
+FROM parse_ast('int outer(int q) { auto inner = [](double d) { return d; }; return q; }', 'cpp', context := 'native')
+WHERE type IN ('function_definition', 'lambda_expression') ORDER BY type;
+----
+function_definition	outer	['q : int']
+lambda_expression	inner	['d : double']
+
+# =============================================================================
+# 3. The seven forms, with arity
+# =============================================================================
+# The arity column is here so that a SHORT list fails. A list that loses its
+# last parameter still matches a prefix if only the text is compared, and
+# silently-short arity was the worst symptom in this cluster (see #319/#320).
+
+query TITT
+SELECT 'plain' AS form, len(parameters), name,
+       list_transform(parameters, lambda p: p.name || ' : ' || p.type)::VARCHAR
+FROM parse_ast('auto f = [](int a, const char* s) { return a; };', 'cpp', context := 'native')
+WHERE type = 'lambda_expression'
+UNION ALL
+SELECT 'capture', len(parameters), name,
+       list_transform(parameters, lambda p: p.name || ' : ' || p.type)::VARCHAR
+FROM parse_ast('int n=0; auto g = [&n](int a) { return a+n; };', 'cpp', context := 'native')
+WHERE type = 'lambda_expression'
+UNION ALL
+SELECT 'generic', len(parameters), name,
+       list_transform(parameters, lambda p: p.name || ' : ' || p.type)::VARCHAR
+FROM parse_ast('auto h = [](auto a, auto&& b) { return a; };', 'cpp', context := 'native')
+WHERE type = 'lambda_expression'
+UNION ALL
+SELECT 'trailing', len(parameters), name,
+       list_transform(parameters, lambda p: p.name || ' : ' || p.type)::VARCHAR
+FROM parse_ast('auto i = [](int a) -> double { return a; };', 'cpp', context := 'native')
+WHERE type = 'lambda_expression'
+UNION ALL
+SELECT 'iife', len(parameters), name,
+       list_transform(parameters, lambda p: p.name || ' : ' || p.type)::VARCHAR
+FROM parse_ast('int x = [](int a){ return a; }(3);', 'cpp', context := 'native')
+WHERE type = 'lambda_expression'
+UNION ALL
+SELECT 'template', len(parameters), name,
+       list_transform(parameters, lambda p: p.name || ' : ' || p.type)::VARCHAR
+FROM parse_ast('auto k = []<typename T>(T a, int b) { return b; };', 'cpp', context := 'native')
+WHERE type = 'lambda_expression'
+ORDER BY form;
+----
+capture	1	g	['a : int']
+generic	2	h	['a : auto', 'b : auto&&']
+iife	1	(empty)	['a : int']
+plain	2	f	['a : int', 's : const char*']
+template	2	k	['a : T', 'b : int']
+trailing	1	i	['a : int']
+
+# =============================================================================
+# 4. Negative control: a lambda with no parameters reports NONE
+# =============================================================================
+# Without this, a fix that returns a plausible non-empty list for every lambda
+# would pass section 3 and be wrong. `mutable` follows an empty parameter list,
+# which is the position a specifier could be mistaken for a parameter.
+
+query TIT
+SELECT 'mutable, no params' AS form, len(parameters), parameters::VARCHAR
+FROM parse_ast('auto j = [n]() mutable { return 1; };', 'cpp', context := 'native')
+WHERE type = 'lambda_expression';
+----
+mutable, no params	0	[]
+
+# A no-capture, no-parameter lambda is the same assertion without the specifier.
+query TIT
+SELECT 'bare', len(parameters), parameters::VARCHAR
+FROM parse_ast('auto m = [](){ return 1; };', 'cpp', context := 'native')
+WHERE type = 'lambda_expression';
+----
+bare	0	[]
+
+# =============================================================================
+# 5. The name column, asserted in both directions
+# =============================================================================
+# A lambda assigned to a variable takes that variable's name. An immediately
+# invoked lambda has no enclosing declarator, so it has no name, and the empty
+# string is the correct answer rather than an invented one.
+
+query TT
+SELECT name = '' AS name_is_empty, len(parameters) AS n
+FROM parse_ast('int x = [](int a){ return a; }(3);', 'cpp', context := 'native')
+WHERE type = 'lambda_expression';
+----
+true	1
+
+query TT
+SELECT name, len(parameters)
+FROM parse_ast('auto named = [](int a){ return a; };', 'cpp', context := 'native')
+WHERE type = 'lambda_expression';
+----
+named	1
