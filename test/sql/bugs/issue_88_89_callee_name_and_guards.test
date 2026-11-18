@@ -176,14 +176,16 @@ caller	5
 # moved to test/data/conformance/control/dynamic_calls.sh. Every call node in
 # that file is unnamed.
 #
-# THE SET OF UNNAMED SHAPES NARROWED ON 2026-11-18. That file used to rely on a
-# bare parameter expansion (`$cmd --flag`) staying unnamed. It no longer does:
-# Teague ruled that a bash command named by a VARIABLE is named as written, so
-# `$cmd --flag` reports `$cmd`. The control was rewritten to use only the two
-# shapes that are still unnamed -- a STRING in command position (`"$prog" arg`)
-# and a command substitution with a string inside (`$("$runner")`), which has no
-# single callee at all (#91). Measured after the rewrite: 3 command nodes, 0
-# named.
+# THE SET OF UNNAMED SHAPES NARROWED TWICE ON 2026-11-18, and the control was
+# rewritten twice chasing it. Teague ruled first that a bash command named by a
+# VARIABLE is named as written (`$cmd --flag` reports `$cmd`), then that a
+# string's whole text is the name ("that command's name is the whole string:
+# $prefix/bin/$tool"), which named `"$prog" arg` as well.
+#
+# THE CONTROL NO LONGER DEPENDS ON A NAMING RULE. It is now three `$(<file)`
+# lines: a command substitution whose body is a REDIRECT holds no `command` node
+# at all, so there is no name position anywhere in the file for a future ruling
+# to fill. Measured: 3 call nodes, 0 named, 0 command nodes.
 statement error
 SELECT * FROM ast_select('test/data/conformance/control/dynamic_calls.sh', '.call#date');
 ----

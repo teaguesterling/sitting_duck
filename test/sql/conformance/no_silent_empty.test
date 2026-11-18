@@ -73,13 +73,18 @@ attribute filters inside :has(...) are not supported
 #
 # dynamic_calls.sh is the replacement: 3 command nodes, 0 named, measured.
 #
-# REWRITTEN 2026-11-18. It used to rely on a bare parameter expansion
-# (`$cmd --flag`) staying unnamed. Teague ruled that a bash command named by a
-# VARIABLE is named as written, so `$cmd` and `$runner` became named and this
-# control stopped raising -- which is how this assertion first failed. The file
-# now uses only the two shapes that are still unnamed: a STRING in command
-# position (`"$prog" arg`, `"${alt}" x`) and a command substitution with a
-# string inside (`$("$runner")`), which has no single callee at all (#91).
+# REWRITTEN TWICE ON 2026-11-18, both times because a naming ruling reached it.
+# It relied first on a bare parameter expansion (`$cmd --flag`) staying unnamed,
+# then on a STRING in command position (`"$prog" arg`). Teague named both: a
+# command named by a variable is named as written, and a string's name is its
+# whole text.
+#
+# The file is now three `$(<file)` lines. A command substitution whose body is a
+# REDIRECT holds no `command` node at all, so the file has no name position for
+# a later ruling to fill -- measured: 3 call nodes, 0 named, 0 command nodes.
+# This assertion failed on each of the two rewrites, which is the only reason
+# either was noticed; the guard itself cannot report that its source went
+# answerable.
 #
 # unnamed_calls.sh is STILL the right control for the conformance kit's
 # CALL-NAMED check, which needs SOME unnamed call node, not all of them. The two
