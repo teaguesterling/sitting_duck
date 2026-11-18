@@ -1,13 +1,104 @@
 # 061 — `ast_source_of` returns a silent empty result when `file_path` is the empty string, which the `duckdb` adapter always produces
 
+**Status: FIXED** on branch `fix/061-duckdb-adapter-file-path`, 2026-11-11, on
+Teague's instruction ("Can you fix that?"). The adapter now reports the real
+path. Read "What fixing it exposed" before closing this entry: the fix was
+measured to turn one macro's loud failure into a WRONG ANSWER, and that needed a
+second change in the same branch.
+
+**MEASURED after the fix**, `build/release/duckdb` on this branch:
+
+| call | `file_path` | was |
+|---|---|---|
+| `read_ast('test/data/sql/example.sql','duckdb')` | `test/data/sql/example.sql` | `''` |
+| `parse_ast('SELECT 1','duckdb')` | `<inline>` | `''` |
+| `read_ast('test/data/python/simple.py')` (control) | unchanged | unchanged |
+
+The four-column pin moved from `1  20  20  0` to `blank_paths = 0`, with
+`control_defs = 1` and `construct_flagged = 20` unchanged — so the change is in
+the `file_path` column and nowhere else. `parse_ast` now reports the SAME
+`<inline>` sentinel every tree-sitter language reports, which was not designed
+for: it falls out of passing the caller's value through instead of inventing
+one, and it makes the macros' existing `<inline>` messages apply.
+
 **Status update (058 fix):** the loud guard landed in the shared body via 058
 (the `__sof_guard` CTE in `src/sql_macros/file_utilities.sql`), so `ast_source_of` over a `duckdb`
-parse now RAISES instead of returning 0 rows (core_alone.test section 7). The
-adapter still writes an empty `file_path`; that root cause is unchanged.
+parse RAISED instead of returning 0 rows (core_alone.test section 7).
 
 **Status (original):** Not fixed. Measured, pinned as a KNOWN DEFECT, and deliberately not
 fixed inside M2 stage 3 task 7 — see "Why it is not fixed here". Ships to the
 public `duckdb/community-extensions` registry with the stage.
+
+## What fixing it exposed
+
+**061 was shielding tracker/bugs/043 by accident, and removing the shield was
+measured to be worse than the bug.** With a real `file_path` the `read_text`
+join in `ast_source_of_from` SUCCEEDS, and the next thing the macro uses is the
+node's line range. 043 is the defect that every duckdb node reports
+`start_line = end_line = 1`. Measured on the fixture: `degenerate_lines = 20`,
+`count(DISTINCT start_line) = 1`, while `customers` is defined on line 15.
+
+So immediately after the adapter fix, and before any guard existed:
+
+```
+SELECT start_line, end_line, encode(source)::VARCHAR
+FROM ast_source_of('test/data/sql/example.sql','customers', language := 'duckdb');
+-- 1  1  "   1: -- Example SQL file for testing"
+```
+
+That is the file's comment header returned as the definition of `customers`,
+with no error. A silent wrong answer is worse than the silent empty that
+`tracker/features/044-v2-m1-contract.md:16` forbids.
+
+**The second change, in the same branch.** `__sof_guard` gained a last branch
+that raises and names 043, keyed on `language = 'duckdb'`. It is keyed on the
+language and not on the line values because `start_line = end_line = 1` is
+legitimate for a real one-line definition, so a data-shaped guard would refuse
+correct input. The node row carries no "this adapter has no line information"
+column, which is what would make a general guard possible. **DELETE THAT BRANCH
+WHEN 043 LANDS** — the comment above it says so.
+
+**`ast_patch` is exposed and is NOT guarded.** It takes an edit set, not an AST
+table, so it has no `language` column, and an edit at `start_line = end_line = 1`
+is indistinguishable from a legitimate insertion at the top of a file. Before
+this fix an empty `file_path` made its join miss; now the join succeeds, so an
+edit set built from a duckdb AST would patch the wrong lines. That exposure
+belongs to 043 and cannot be closed from inside `ast_patch`.
+
+## The fix, as landed
+
+`DuckDBAdapter::ParseSQL` took a second parameter, `file_path`, and became the
+single writer of `source.file_path` on the native path. The prescription earlier
+in this file said to assign at each of the three call sites with no signature
+change; that was not followed, for two measured reasons:
+
+1. The three sites all funnel through `ParseSQL`, so one write replaces three.
+2. `CreateErrorResult` wrote no `file_path` either, so an error row under
+   `ignore_errors` could not name its file. Stamping the result inside
+   `ParseSQL` covers the error path too, which the three-site version would not.
+
+The parameter has NO DEFAULT. A defaulted parameter is exactly how a fourth call
+site would reintroduce this bug silently; without one the compiler refuses it.
+
+Files: `src/include/duckdb_adapter.hpp`, `languages/duckdb/duckdb_adapter.cpp`
+(the `ParseSQL` body, the removed `result.source.file_path = ""` in
+`ConvertStatementsToAST`, and the `GetParsingFunction()` lambda),
+`src/language_adapter_registry_init.cpp` (both `SD_BUILTIN_LANGUAGE_NATIVE`
+dispatch macros), `src/sql_macros/file_utilities.sql`,
+`src/include/embedded_sql_macros.hpp` (regenerated), and
+`test/sql/core_alone.test`.
+
+**Which path serves `read_ast` is now MEASURED**, and this file previously said
+it was not. `read_ast` reaches the `GetParsingFunction()` lambda through
+`src/ast_parsing_task.cpp:78`; `parse_ast` reaches the registry dispatch through
+`src/unified_ast_backend.cpp:133`. Both were fixed, and the two different
+`file_path` values above prove both paths run.
+
+**Verification.** 7 affected test files, 600 assertions, 0 failures;
+`core_alone.test` alone completes at 191 assertions. The macro boundary gate is
+unchanged at 105 macros / 69 edges / 0 violations. The built extension was
+grepped for the new guard text (present) and the removed claim (absent), with a
+sentinel control returning 0.
 **Found by:** M2 stage 3 task 7, while calling every core macro in a build whose
 only language is `duckdb`. Given its own id by the task-7 code review
 (2026-11-10), which measured that neither of the two nearby bugs covers it.
