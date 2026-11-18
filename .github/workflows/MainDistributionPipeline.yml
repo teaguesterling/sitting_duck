@@ -315,12 +315,12 @@ jobs:
       - uses: actions/checkout@v4
       - name: Ensure PyYAML is available
         run: python3 -c "import yaml" || python3 -m pip install --break-system-packages pyyaml
-      - name: Regenerate embedded_sql_macros.hpp from src/sql_macros/*.sql
+      - name: Regenerate embedded_sql_macros.hpp from core/sql_macros/*.sql
         run: python3 scripts/embed_sql_macros.py
       - name: Verify committed header matches
         run: |
-          if ! git diff --exit-code -- src/include/embedded_sql_macros.hpp; then
-            echo '::error file=src/include/embedded_sql_macros.hpp::embedded_sql_macros.hpp is out of sync with src/sql_macros/*.sql. Run `python3 scripts/embed_sql_macros.py` and commit the regenerated header alongside the .sql change.'
+          if ! git diff --exit-code -- core/include/embedded_sql_macros.hpp; then
+            echo '::error file=core/include/embedded_sql_macros.hpp::embedded_sql_macros.hpp is out of sync with core/sql_macros/*.sql. Run `python3 scripts/embed_sql_macros.py` and commit the regenerated header alongside the .sql change.'
             exit 1
           fi
 
@@ -444,7 +444,7 @@ jobs:
         run: python3 scripts/generate_taxonomy.py
       - name: Verify the committed tables match
         run: |
-          if ! git diff --exit-code -- src/include/semantic_types.hpp src/semantic_types.cpp src/include/node_config.hpp src/language_config_json.cpp src/ast_type_map_function.cpp; then
+          if ! git diff --exit-code -- core/include/semantic_types.hpp core/semantic_types.cpp core/include/node_config.hpp core/language_config_json.cpp core/ast_type_map_function.cpp; then
             echo '::error file=spec/taxonomy/taxonomy.yaml::the generated taxonomy tables are out of sync with spec/taxonomy/taxonomy.yaml. Run `python3 scripts/generate_taxonomy.py` and commit the regenerated sources alongside the spec change.'
             exit 1
           fi
@@ -537,7 +537,7 @@ jobs:
       - name: Smoke test subset behavior
         run: ./scripts/test_language_subset.sh build/release/duckdb
 
-  # M2 stage 3 (tracker/features/057) split src/sql_macros into a `core` half and
+  # M2 stage 3 (tracker/features/057) split core/sql_macros into a `core` half and
   # an `addon` half, on the claim that the core half is language-agnostic --
   # which is what lets duckling ship the core with no tree-sitter grammar.
   # scripts/verify_macro_boundary.py asserts that STATICALLY over macro text, and

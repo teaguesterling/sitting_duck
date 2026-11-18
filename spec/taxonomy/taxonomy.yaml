@@ -6,7 +6,7 @@
 # GENERATED from this file by scripts/generate_taxonomy.py; the committed C++ and
 # this spec are kept in lockstep by the "taxonomy tables in sync" CI check.
 #
-# The src/language_configs/*.def files keep referring to these names
+# The core/language_configs/*.def files keep referring to these names
 # (DEF_TYPE(raw_type, semantic_type, name_extraction, native_extraction, flags));
 # this spec is the single definition those names resolve to.
 #

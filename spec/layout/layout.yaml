@@ -101,7 +101,7 @@ registration_order:
 
 # THE SQL MACRO MANIFEST.
 #
-# This list IS the registration order of src/sql_macros/*.sql, and
+# This list IS the registration order of core/sql_macros/*.sql, and
 # scripts/embed_sql_macros.py reads it to build the embedded header. It used to
 # be a hardcoded list inside that script.
 #
@@ -193,16 +193,15 @@ not_a_language: []
 # engine. Listed with full paths and checked for existence, so that deleting or
 # moving one is a finding rather than a silent drop out of every count.
 engine_adapters:
-  - path: "src/language_adapters/dynamic_language_adapter.cpp"
+  - path: "core/language_adapters/dynamic_language_adapter.cpp"
     reason: "implements LanguageAdapter from DATA (register_language); not one language"
-  - path: "src/language_adapters/duckdb_adapter_backup.cpp"
     reason: "dead: the build never compiles it (#226). Does not match *_adapter.cpp."
 
 # THE CONFORMANCE KIT'S DENOMINATOR.
 #
 # scripts/conformance_kit.sh scans DEFAULT_DEF_SOURCES:
-#     ${repo_root}/src/language_configs/*_types.def
-#     ${repo_root}/src/language_adapters/*_adapter.cpp
+#     ${repo_root}/core/language_configs/*_types.def
+#     ${repo_root}/core/language_adapters/*_adapter.cpp
 # After the M2 move those globs match zero files. A language whose declarations
 # the kit cannot read is reported UNDECL, not FAIL -- so the kit goes blind and
 # STAYS GREEN. That is the failure this section exists to prevent.

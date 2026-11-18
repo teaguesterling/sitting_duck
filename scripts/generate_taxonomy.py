@@ -11,7 +11,7 @@ Each generated block lives between BEGIN/END markers inside its existing file,
 so nothing moves and non-taxonomy code in those files is untouched. The
 committed C++ and the spec are kept in lockstep by the "taxonomy tables in
 sync" CI check, exactly like scripts/embed_sql_macros.py and
-src/include/embedded_sql_macros.hpp.
+core/include/embedded_sql_macros.hpp.
 
 Usage:
     python3 scripts/generate_taxonomy.py              # rewrite the marked regions
@@ -272,7 +272,7 @@ def comment_lines(text):
 
 
 # ---------------------------------------------------------------------------
-# Region: semantic_type_constants  (src/include/semantic_types.hpp)
+# Region: semantic_type_constants  (core/include/semantic_types.hpp)
 # ---------------------------------------------------------------------------
 
 
@@ -352,7 +352,7 @@ def render_semantic_type_constants(spec):
 
 
 # ---------------------------------------------------------------------------
-# Region: semantic_type_tables  (src/semantic_types.cpp)
+# Region: semantic_type_tables  (core/semantic_types.cpp)
 # ---------------------------------------------------------------------------
 
 
@@ -520,7 +520,7 @@ def strategy_label(value):
 
 
 # ---------------------------------------------------------------------------
-# Region: extraction_strategy_enums  (src/include/node_config.hpp)
+# Region: extraction_strategy_enums  (core/include/node_config.hpp)
 # ---------------------------------------------------------------------------
 
 
@@ -556,7 +556,7 @@ def render_extraction_strategy_enums(spec):
 
 
 # ---------------------------------------------------------------------------
-# Region: node_flag_constants  (src/include/node_config.hpp)
+# Region: node_flag_constants  (core/include/node_config.hpp)
 # ---------------------------------------------------------------------------
 
 
@@ -623,7 +623,7 @@ def render_node_flag_constants(spec):
 
 
 # ---------------------------------------------------------------------------
-# Region: name_strategy_entries  (src/language_config_json.cpp)
+# Region: name_strategy_entries  (core/language_config_json.cpp)
 # ---------------------------------------------------------------------------
 
 
@@ -647,7 +647,7 @@ def render_name_strategy_entries(spec):
 
 
 # ---------------------------------------------------------------------------
-# Region: flag_name_table  (src/language_config_json.cpp)
+# Region: flag_name_table  (core/language_config_json.cpp)
 # ---------------------------------------------------------------------------
 
 
@@ -661,7 +661,7 @@ def render_flag_name_table(spec):
 
 
 # ---------------------------------------------------------------------------
-# Region: type_map_name_tables  (src/ast_type_map_function.cpp)
+# Region: type_map_name_tables  (core/ast_type_map_function.cpp)
 # ---------------------------------------------------------------------------
 
 
@@ -732,25 +732,25 @@ def render_type_map_name_tables(spec):
 REGIONS = [
     (
         "extraction_strategy_enums",
-        "src/include/node_config.hpp",
+        "core/include/node_config.hpp",
         render_extraction_strategy_enums,
     ),
-    ("node_flag_constants", "src/include/node_config.hpp", render_node_flag_constants),
+    ("node_flag_constants", "core/include/node_config.hpp", render_node_flag_constants),
     (
         "semantic_type_constants",
-        "src/include/semantic_types.hpp",
+        "core/include/semantic_types.hpp",
         render_semantic_type_constants,
     ),
-    ("semantic_type_tables", "src/semantic_types.cpp", render_semantic_type_tables),
+    ("semantic_type_tables", "core/semantic_types.cpp", render_semantic_type_tables),
     (
         "name_strategy_entries",
-        "src/language_config_json.cpp",
+        "core/language_config_json.cpp",
         render_name_strategy_entries,
     ),
-    ("flag_name_table", "src/language_config_json.cpp", render_flag_name_table),
+    ("flag_name_table", "core/language_config_json.cpp", render_flag_name_table),
     (
         "type_map_name_tables",
-        "src/ast_type_map_function.cpp",
+        "core/ast_type_map_function.cpp",
         render_type_map_name_tables,
     ),
 ]

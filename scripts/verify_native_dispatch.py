@@ -63,7 +63,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
 SPEC = ROOT / "spec" / "abi" / "module-abi.yaml"
-SHARED_TABLE = ROOT / "src" / "include" / "function_call_extractor.hpp"
+SHARED_TABLE = ROOT / "core" / "include" / "function_call_extractor.hpp"
 
 # tree-sitter's generated grammar directory does not always match our language
 # name.
@@ -73,7 +73,7 @@ GRAMMAR_DIR_FOR = {"csharp": "c-sharp"}
 # than by a missing-grammar skip, so that a real grammar going missing is still
 # reported. duckdb wraps DuckDB's own parser; dynamic_language is the
 # out-of-tree JSON path; the _backup file is not compiled.
-NOT_TREE_SITTER = {"duckdb", "dynamic_language", "duckdb_adapter_backup.cpp"}
+NOT_TREE_SITTER = {"duckdb", "dynamic_language"}
 
 SYMBOL = re.compile(r'\]\s*=\s*"((?:[^"\\]|\\.)*)"\s*,')
 
@@ -463,7 +463,7 @@ def key_findings(tags, keys, live):
 
 def instantiated_tags():
     found = set()
-    for path in sorted((ROOT / "src").rglob("*.hpp")) + sorted((ROOT / "src").rglob("*.cpp")):
+    for path in sorted((ROOT / "core").rglob("*.hpp")) + sorted((ROOT / "core").rglob("*.cpp")):
         for m in re.finditer(r'UnifiedFunctionCallExtractor\s*<\s*([A-Za-z0-9_]+)\s*>',
                              path.read_text(encoding="utf-8", errors="replace")):
             found.add(m.group(1))
@@ -616,7 +616,7 @@ def main() -> int:
         baseline[(entry["check"], entry["language"], entry["literal"])] = entry
 
     headers = {p.name.replace("_native_extractors.hpp", ""): p
-               for p in (ROOT / "src" / "include").glob("*_native_extractors.hpp")}
+               for p in (ROOT / "core" / "include").glob("*_native_extractors.hpp")}
     # One directory per language since 054 M2 stage 1; this was
     # src/language_adapters/*_adapter.cpp before that move. The path is built
     # from components, so the string "src/language_adapters" never appeared in

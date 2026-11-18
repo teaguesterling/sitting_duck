@@ -33,7 +33,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
 LAYOUT = ROOT / "spec" / "layout" / "layout.yaml"
-SQL_DIR = ROOT / "src" / "sql_macros"
+SQL_DIR = ROOT / "core" / "sql_macros"
 
 # `python3 -I` leaves the script's own directory off sys.path.
 sys.path.insert(0, str(Path(__file__).resolve().parent))

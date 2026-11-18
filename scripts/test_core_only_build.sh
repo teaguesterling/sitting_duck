@@ -2,7 +2,7 @@
 # Build sitting_duck with NO tree-sitter language compiled in, and prove the core
 # SQL macros still work (M2 stage 3, tracker/features/057).
 #
-# WHY THIS EXISTS. M2 stage 3 split src/sql_macros into a `core` half and an
+# WHY THIS EXISTS. M2 stage 3 split core/sql_macros into a `core` half and an
 # `addon` half and gave nine core macros a `_from` variant that reads an AST out
 # of a named TABLE instead of parsing a path. The claim being made is that the
 # core half is language-agnostic. scripts/verify_macro_boundary.py asserts that
@@ -110,12 +110,12 @@ else
         || fail "$GEN_DEF's one native entry is not duckdb"
     ok "generated language table: 1 native (duckdb), 0 tree-sitter"
 
-    # The configure regenerates src/include/embedded_sql_macros.hpp INTO THE
+    # The configure regenerates core/include/embedded_sql_macros.hpp INTO THE
     # SOURCE TREE. It must come back byte-identical under a restricted language
     # set: a diff here would mean the generator depends on the language
     # selection, which would be a defect in the stage's manifest work.
-    if ! git diff --quiet -- src/include/embedded_sql_macros.hpp; then
-        fail "configuring with one language changed src/include/embedded_sql_macros.hpp; the macro generator must not depend on the language selection"
+    if ! git diff --quiet -- core/include/embedded_sql_macros.hpp; then
+        fail "configuring with one language changed core/include/embedded_sql_macros.hpp; the macro generator must not depend on the language selection"
     fi
     ok "embedded_sql_macros.hpp unchanged by a one-language configure"
 
@@ -180,7 +180,7 @@ expect_error "SELECT * FROM read_ast('test/data/python/sample_app.py');" \
     "Could not detect language" "read_ast on a .py file errors like an unknown extension"
 
 # THE FACT THE WHOLE FIXTURE APPROACH RESTS ON, measured on this binary rather
-# than inferred from src/unparse_rules.cpp. That file #includes all 53 languages'
+# than inferred from core/unparse_rules.cpp. That file #includes all 53 languages'
 # *_unparse.def files unconditionally, so python's UNPARSE RULES are compiled in
 # even though python's PARSER is not. If that were false, core_alone.test's
 # ast_unparse_from digest would differ between the two builds and the test would
@@ -204,7 +204,7 @@ ok "unparse rules for python are compiled in without a python parser ($PY_RULES 
 # while the leg stayed green printing the number that disproves its own comment.
 # What IS asserted is the claim the comment makes: that a macro from the ADD-ON
 # side of the boundary is registered here. ast_dead_code is defined in
-# src/sql_macros/tree_analysis.sql, which the manifest tags `side: addon`, so
+# core/sql_macros/tree_analysis.sql, which the manifest tags `side: addon`, so
 # its presence is direct evidence rather than an inference from a total.
 N_MACROS=$(run_sql "SELECT count(*) FROM duckdb_functions() WHERE database_name = 'memory';")
 echo "--- macros registered in this build: $N_MACROS (printed for diagnosis, not asserted) ---"
@@ -233,7 +233,7 @@ import yaml
 
 layout = root / 'spec' / 'layout' / 'layout.yaml'
 manifest = yaml.safe_load(layout.read_text(encoding='utf-8'))['sql_macros']
-owner, _body, empty = vmb.parse_macros(root / 'src' / 'sql_macros', manifest)
+owner, _body, empty = vmb.parse_macros(root / 'core' / 'sql_macros', manifest)
 if empty:
     sys.exit(f"FAIL: no macro definitions found in {empty}; the parser is wrong, not the code")
 side = {e['file']: e['side'] for e in manifest}

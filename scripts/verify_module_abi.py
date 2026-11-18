@@ -69,16 +69,16 @@ from audit_leaf_text_gaps import (  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SPEC = ROOT / "spec" / "abi" / "module-abi.yaml"
-HEADER = ROOT / "src" / "include" / "native_context_extraction.hpp"
-NODE_CONFIG = ROOT / "src" / "include" / "node_config.hpp"
+HEADER = ROOT / "core" / "include" / "native_context_extraction.hpp"
+NODE_CONFIG = ROOT / "core" / "include" / "node_config.hpp"
 # Per-language sources moved to languages/<lang>/ in 054 M2 stage 1.
 LANGUAGES_DIR = ROOT / "languages"
 
-# Where LanguageAdapter subclasses are declared. duckdb_adapter_backup.hpp also
-# declares one and is deliberately excluded: the build never compiles it (#226).
+# Where LanguageAdapter subclasses are declared. An uncompiled
+# duckdb_adapter_backup.hpp used to be excluded here; 054 M2 stage 4 deleted it.
 ADAPTER_HEADERS = [
-    ROOT / "src" / "include" / "language_adapter.hpp",
-    ROOT / "src" / "include" / "duckdb_adapter.hpp",
+    ROOT / "core" / "include" / "language_adapter.hpp",
+    ROOT / "core" / "include" / "duckdb_adapter.hpp",
 ]
 # Implements the interface from DATA rather than being one language's module.
 NOT_A_LANGUAGE = {"DynamicLanguageAdapter"}
@@ -150,7 +150,7 @@ def locate(path, node_type):
 def specializations():
     """{extractor template name: {strategy, ...}} over every extractor header."""
     out = {}
-    for path in sorted((ROOT / "src" / "include").glob("*_native_extractors.hpp")):
+    for path in sorted((ROOT / "core" / "include").glob("*_native_extractors.hpp")):
         text = path.read_text(encoding="utf-8", errors="replace")
         for extractor, strategy in EXTRACTOR_SPEC.findall(text):
             out.setdefault(extractor, set()).add(strategy)

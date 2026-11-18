@@ -31,7 +31,7 @@ things must survive that move, and each has a way of breaking silently:
      against the generated X-macro table when a build is present.
 
   2. THE CONFORMANCE KIT'S DENOMINATOR. conformance_kit.sh scans
-     src/language_configs/*_types.def and src/language_adapters/*_adapter.cpp.
+     core/language_configs/*_types.def and core/language_adapters/*_adapter.cpp.
      After the move those globs match zero files, and a language whose
      declarations the kit cannot read is reported UNDECL -- not FAIL. The kit
      would go blind and STAY GREEN. This gate asserts floors on the file count,

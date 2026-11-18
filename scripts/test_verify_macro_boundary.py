@@ -8,7 +8,7 @@ and require the gate to go red. The last four are the I3 hardening cases: a
 case-variant reference, an add-on declared `CREATE FUNCTION` or `main.<name>`,
 a dollar-quoted string, and the docstring's record of what is still not seen.
 
-Each case builds a tree with spec/layout/layout.yaml and src/sql_macros/*.sql
+Each case builds a tree with spec/layout/layout.yaml and core/sql_macros/*.sql
 and runs the gate on it with --root. Exit 0 alone proves nothing, so every case
 also checks the text the gate printed.
 """
@@ -28,13 +28,13 @@ def run_gate(files, sides, unlisted=None):
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         (root / "spec" / "layout").mkdir(parents=True)
-        (root / "src" / "sql_macros").mkdir(parents=True)
+        (root / "core" / "sql_macros").mkdir(parents=True)
         manifest = "".join(f"  - {{file: {n}, side: {sides[n]}}}\n" for n in files)
         (root / "spec" / "layout" / "layout.yaml").write_text("sql_macros:\n" + manifest)
         for name, sql in files.items():
-            (root / "src" / "sql_macros" / name).write_text(sql)
+            (root / "core" / "sql_macros" / name).write_text(sql)
         for name, sql in (unlisted or {}).items():
-            (root / "src" / "sql_macros" / name).write_text(sql)
+            (root / "core" / "sql_macros" / name).write_text(sql)
         p = subprocess.run([sys.executable, "-I", str(GATE), "--root", str(root)],
                            capture_output=True, text=True)
         return p.returncode, p.stdout + p.stderr

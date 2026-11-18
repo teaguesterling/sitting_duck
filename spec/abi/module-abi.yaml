@@ -25,7 +25,7 @@ layers:
     symbol_name: caller-supplied, the `symbol` argument of register_language()
     version_check: ts_language_version(language) must fall within
       TREE_SITTER_MIN_COMPATIBLE_LANGUAGE_VERSION..TREE_SITTER_LANGUAGE_VERSION
-    enforced_in: src/register_language_function.cpp
+    enforced_in: core/register_language_function.cpp
     # No C++ type crosses this boundary. LanguageAdapter's methods pass string,
     # vector, unordered_map and unique_ptr, none of which is stable across
     # separately compiled binaries -- so the source layer below is deliberately
@@ -35,8 +35,8 @@ layers:
   data:
     # How an out-of-tree module declares semantics: as JSON, not as C++.
     # DynamicLanguageAdapter implements the whole source interface from this.
-    schema_parsed_by: ParseLanguageConfigJSON (src/language_config_json.cpp)
-    consumed_by: DynamicLanguageAdapter (src/include/language_adapter.hpp)
+    schema_parsed_by: ParseLanguageConfigJSON (core/language_config_json.cpp)
+    consumed_by: DynamicLanguageAdapter (core/include/language_adapter.hpp)
     shape: '{"language": <name>, "node_types": {<raw_type>: {...}}}'
     node_config_fields: [semantic_type, refinement, name_strategy, flags]
     # Refused outright rather than accepted and ignored, so a config author
@@ -50,7 +50,7 @@ layers:
 
   source:
     # The interface a compiled-in module implements. In-tree only.
-    base_class: LanguageAdapter (src/include/language_adapter.hpp)
+    base_class: LanguageAdapter (core/include/language_adapter.hpp)
     pure_virtuals:
       - GetLanguageName
       - GetAliases
@@ -73,7 +73,7 @@ layers:
 # the base class: a module declares it through template specializations, so a
 # missing one is not a compile error -- it silently selects the empty default.
 native_extraction:
-  dispatcher: ExtractNativeContextTemplated (src/include/native_context_extraction.hpp)
+  dispatcher: ExtractNativeContextTemplated (core/include/native_context_extraction.hpp)
 
   # Strategies the dispatcher has a case for. A .def may declare these.
   dispatched:
