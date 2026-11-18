@@ -1,9 +1,9 @@
 # 054 — M2: the in-tree `core/` + `languages/<lang>/` layout
 
-**Status:** stages 0–3 are all merged. **Stage 4, the `core/` directory, is
-still owed** — ruled by Teague on 2026-11-17 — so M2 is not complete and
-`v2.0.0-alpha` is not one stage away. Written 2026-11-03 as a plan; §10 records
-what executing it measured, and §11 the 2026-11-17 re-measurement.
+**Status:** stages 0–4 are all written. Stage 4, the `core/` directory, was
+executed on 2026-11-18 and is **awaiting CI and review**, not yet merged.
+Written 2026-11-03 as a plan; §10 records what executing it measured, §11 the
+2026-11-17 re-measurement, and §12 what stage 4 moved.
 
 Teague approved "stages 0–2, stop before the macro split".
 
@@ -13,7 +13,7 @@ Teague approved "stages 0–2, stop before the macro split".
 | 1 — `git mv` to `languages/<lang>/` | merged | PR #307, `8532350` `7e5fa17` `b96e588` |
 | 2 — `module.cmake` per language | merged | PR #307, `525e083` `6037b17` |
 | 3 — the macro split | merged | `691de8b`, an ancestor of main; `src/sql_macros/tree_analysis.sql` |
-| 4 — the `core/` directory | **open, still owed** | — (ruled 2026-11-17; see §11) |
+| 4 — the `core/` directory | executed 2026-11-18, **in review** | `ad15d50` `30c4f88`; see §12 |
 
 **Scope source:** `docs/planning/v2-architecture.md` "Migration sequencing", M2.
 `tracker/features/044-v2-m1-contract.md:262` makes M2 the next action.
@@ -30,7 +30,7 @@ The RFC defines M2 as four pieces. One of them is already complete.
 
 | Piece | State | Measured how |
 |---|---|---|
-| `core/` + `languages/<lang>/` directories | **not started** | no such directory in the tree |
+| `core/` + `languages/<lang>/` directories | **DONE** (2026-11-18, in review) | `core/` holds 108 tracked files; `languages/` is 33 directories |
 | grammar submodule refs replace vendored copies | **DONE** | 27 `grammars/tree-sitter-*` submodules in `.gitmodules`; zero `third_party/tree-sitter-*` directories; `CMakeLists.txt:36` sets `PARSER_SOURCE_DIR` to `${CMAKE_CURRENT_SOURCE_DIR}/grammars` |
 | `module.cmake` per language | **not started** | all 28 declared centrally in `cmake/BuiltinLanguages.cmake` |
 | macro split (core accessors vs add-ons) | **not started** | 13 files, 7369 lines, in `src/sql_macros/` |
@@ -337,10 +337,10 @@ rather than the status lines, because the status lines were the subject.
 | macro split | DONE | 14 `.sql` files; `tree_analysis.sql` present |
 | `core/` + `languages/<lang>/` | **HALF** | `languages/` is 33 directories; **`core/` does not exist** |
 
-`src/` still holds the engine. Two files remain under `src/language_adapters/`:
-`dynamic_language_adapter.cpp`, which is engine code and belongs there, and
-`duckdb_adapter_backup.cpp`, which no CMake file references. The second is a dead
-file and a candidate for #226.
+**Superseded by §12.** When this was written, `src/` still held the engine and
+two files sat under `src/language_adapters/`: `dynamic_language_adapter.cpp`,
+engine code, and `duckdb_adapter_backup.cpp`, which no CMake file referenced.
+Stage 4 moved the first to `core/language_adapters/` and deleted the second.
 
 **Ruling — Teague, 2026-11-17: the `core/` half is still owed.** M2 is not
 complete, and `v2.0.0-alpha` waits on it. The stage has no plan yet. Moving the
@@ -364,3 +364,78 @@ The M3 gate is unaffected, and it is measurable rather than a judgement:
 `version: 1.0.0` at every one of them. But the split-after-stability rule measures
 stability across a *full milestone*, and no `v2.0.0-alpha` tag exists, so that
 interval still has only one end.
+
+---
+
+## 12. Stage 4 executed, 2026-11-18
+
+Option A: the whole of `src/` became `core/`, including the 20 per-language
+`*_native_extractors.hpp` headers, which stay together in `core/include/`
+rather than moving to `languages/<lang>/`.
+
+| Reading | Value |
+|---|---|
+| commits | `ad15d50` (move), `30c4f88` (tests) |
+| files | 125 changed, 107 renames, +91 −681 |
+| `core/` | 108 tracked files |
+| path references updated | 86 across 15 files |
+| `#include` lines changed | **0** |
+| deleted | `duckdb_adapter_backup.{cpp,hpp}`, `src/CLEANUP_SUMMARY.md` |
+
+**No include statement changed.** Measured: `git grep -nE '^\s*#include.*src/'`
+returns nothing across `core/`, `languages/` and `test/`. Engine headers are
+included by bare filename through `include_directories()`, repointed from
+`src/include` to `core/include`.
+
+### 12a. The references came in four shapes
+
+Only the first is what a `grep 'src/'` finds:
+
+| Shape | Example | Files |
+|---|---|---|
+| string | `src/include/foo.hpp` | 12 |
+| built from components | `ROOT / "src" / "include"` | 7 |
+| functional, in a test | `read_ast('src/unified_ast_backend.cpp')` | 3 |
+| bare word | `FORMAT_DIRS := src` | 1 |
+
+Two component-form references were `scripts/embed_sql_macros.py`'s real input
+and output paths. Missing them would have broken the macro generator while
+leaving no `src/` string to find. `scripts/verify_native_dispatch.py` already
+carried a comment saying a path "is built from components, so the string
+`src/language_adapters` never appeared" — written after stage 1 was caught the
+same way.
+
+The bare-word form fails silently: with `FORMAT_DIRS` still naming `src`,
+`make format` would cover nothing in the engine and report no error.
+
+### 12b. The oracle
+
+| Build | Commit | Tree | Body sha256 | Surface (3391 rows) |
+|---|---|---|---|---|
+| A | `6c9ceb8` | `36e7504` | `b3cc9054…` | `c15945e3…` |
+| B | `ad15d50` | `c984ce4` | `b3cc9054…` | `c15945e3…` |
+
+Both halves identical. Scope: this proves the default `linux_amd64` release
+configuration. The core-only, language-subset, runtime-grammar, wasm and
+windows builds are proven by CI, not by this oracle.
+
+The extension's metadata footer embeds this repo's own commit, so whole-file
+equality is **invalid** — a correct move fails it. The footer is exactly 534
+bytes and the comparison strips it. Full hashes differ only in footer field 4:
+`6c9ceb80f1` against `ad15d50c91`.
+
+### 12c. Not changed, deliberately
+
+- 34 grammar paths in `CMakeLists.txt`. Of its 62 `src/` occurrences only 26
+  are the engine's; each bundled grammar has its own `src/`.
+- 18 one-off scripts under `scripts/`, and `tools/`, which neither CI nor the
+  build invokes. Stage 1 left 12 such citations stale and they still are.
+- Roughly 270 citations in comments and docs.
+- Four comments describing the paths as they were before stage 1.
+- User-facing example strings compiled into the extension, such as
+  `read_ast('src/main.cpp')` in the function docs, and the HTML `src`
+  attribute.
+- `languages/` is absent from `FORMAT_DIRS` — a gap stage 1 created, still
+  open, flagged rather than fixed here.
+
+The stage-4 plan is at `tracker/roadmap/m2-stage4-core-directory-plan.md`.

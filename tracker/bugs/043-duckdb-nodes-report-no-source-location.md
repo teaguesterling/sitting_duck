@@ -17,10 +17,10 @@ raises and names this entry; **delete that branch when this bug lands.**
 an edit set carries no language and a line-1 edit is a legitimate insertion.
 
 **The citation in "The defect" below names a file that does not exist.**
-`src/language_adapters/duckdb_adapter.cpp` is gone; `ls` returns
-"No such file or directory", and the only thing left in that directory is
-`duckdb_adapter_backup.cpp`, which is not referenced by CMake and does not
-contain these lines. The live site is `DuckDBAdapter::CreateASTNode` in
+`src/language_adapters/duckdb_adapter.cpp` is gone, and so is the whole of
+`src/`: 054 M2 stage 4 moved the engine to `core/` on 2026-11-18 and deleted
+the uncompiled `duckdb_adapter_backup.cpp` that was the last file beside it.
+The live site is `DuckDBAdapter::CreateASTNode` in
 `languages/duckdb/duckdb_adapter.cpp` (lines 1067-1070 on
 `fix/061-duckdb-adapter-file-path`; cite the FUNCTION, because the line numbers
 moved once already).
