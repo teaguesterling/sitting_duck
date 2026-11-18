@@ -50,12 +50,21 @@
 # `concatenation` node rather than a string, and takes the same answer -- which
 # is the form Teague wrote.
 #
-# ROW 5 IS A DECIDED BOUNDARY, NOT AN OVERSIGHT. An ANSI-C string keeps its
-# `$'...'` spelling, because the text starts with `$` and only a MATCHED outer
-# pair is stripped. `ansi` is arguable; nothing in the corpus exercises the
-# shape, so no fixture measures it either way. Raised as an open question with
-# the ruling and accepted as it stands (Teague, 2026-11-18), so it is pinned
-# here -- an undecided edge is how this file's guard control got voided twice in
+# WHAT THE NAME MEANS IN THESE CASES, which is the point of keeping the `$`:
+# it is AN INDICATION OF AN UNEVALUATED NAME (Teague, 2026-11-18). The command
+# that runs is the value, and the value is not knowable here, so the name
+# records the expression that will produce it. A consumer can tell the two
+# apart by the leading `$`: `date` ran `date`, and `$CC` ran whatever `$CC`
+# held.
+#
+# SO THE ANSWER IS DELIBERATELY IMPERFECT, and that is accepted rather than
+# overlooked. These are bashisms. Row 5 is the clearest case: an ANSI-C string
+# keeps its `$'...'` spelling, because the text starts with `$` and only a
+# MATCHED outer pair is stripped. `ansi` is arguable, and nothing in the corpus
+# exercises the shape, so no fixture measured it either way until this row.
+# Teague's reading: imperfect is fine at this layer, and the refinement belongs
+# in the semantic type refinements rather than in this string. Pinned here
+# because an undecided edge is how this file's guard control got voided twice in
 # one day.
 #
 # THE ONE EXCEPTION IS A COMMAND SUBSTITUTION, which has no single callee at all

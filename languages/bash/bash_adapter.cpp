@@ -154,6 +154,18 @@ string BashAdapter::ExtractNodeName(TSNode node, const string &content) const {
 				// "The name as written" is also already the convention for kotlin's
 				// parent types and jsx's `svg:circle`.
 				//
+				// WHAT THE NAME MEANS HERE: it is an INDICATION OF AN UNEVALUATED NAME
+				// (Teague, 2026-11-18). The command that runs is the value, which is not
+				// knowable at parse time, so the name records the expression that
+				// produces it. The leading `$` is what lets a consumer tell the two
+				// apart, which is why it is kept rather than stripped with the quotes.
+				//
+				// THE ANSWER IS THEREFORE IMPERFECT ON PURPOSE. `$'ansi'` keeps its
+				// `$'...'` spelling, and `"$a"b` keeps its interior quotes, because only
+				// a matched outer pair comes off. These are bashisms, and the place to
+				// refine them is the semantic type refinements -- not a larger string
+				// rule here, which would trade one rough edge for several.
+				//
 				// THE ONE EXCEPTION IS A COMMAND SUBSTITUTION (#91): `$(which ls) -l`
 				// runs whatever `which ls` printed, so the outer command has no callee
 				// to name, and the inner command already carries `which` on its own row.
