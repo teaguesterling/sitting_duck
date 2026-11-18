@@ -13,6 +13,47 @@ const TSLanguage *tree_sitter_bash();
 
 namespace duckdb {
 
+namespace {
+
+// Does this subtree hold a command substitution? `$(...)` and the backtick form
+// both parse as `command_substitution`, and either one may sit inside a string
+// or a concatenation in command position: `"$(which ls)" -l`. A substitution in
+// command position has no single callee (#91), so the whole name position is
+// unnamed when one is present at any depth.
+bool HoldsCommandSubstitution(TSNode node) {
+	if (ts_node_is_null(node)) {
+		return false;
+	}
+	if (strcmp(ts_node_type(node), "command_substitution") == 0) {
+		return true;
+	}
+	uint32_t child_count = ts_node_child_count(node);
+	for (uint32_t i = 0; i < child_count; i++) {
+		if (HoldsCommandSubstitution(ts_node_child(node, i))) {
+			return true;
+		}
+	}
+	return false;
+}
+
+// Strip one matched pair of surrounding quotes. The quote characters are shell
+// syntax rather than part of the command name, so `"$cmd"` and `$cmd` give the
+// same name and join to each other, and `'ls' -l` is the command `ls`. A
+// concatenation that merely BEGINS with a quote (`"$a"b`) keeps its text,
+// because its last character is not the closing quote.
+string StripOuterQuotes(const string &text) {
+	if (text.size() < 2) {
+		return text;
+	}
+	const char first = text.front();
+	if ((first == '"' || first == '\'') && text.back() == first) {
+		return text.substr(1, text.size() - 2);
+	}
+	return text;
+}
+
+} // namespace
+
 //==============================================================================
 // Bash Adapter implementation
 //==============================================================================
@@ -73,22 +114,19 @@ string BashAdapter::ExtractNodeName(TSNode node, const string &content) const {
 				if (ts_node_is_null(name_node)) {
 					return "";
 				}
-				// A literal `word` is a statically knowable command name, and is the
-				// common case.
-				string word = FindChildByType(name_node, content, "word");
-				if (!word.empty()) {
-					return word;
-				}
-				// A VARIABLE in command position is named AS WRITTEN, `$` included:
-				// `$verbose && ...` is named `$verbose`, `${CMD} arg` is named `${CMD}`.
+				// THE NAME IS THE TEXT AS WRITTEN. Teague ruled it twice on
+				// 2026-11-18: first that a VARIABLE in command position is named as
+				// written (`$verbose`, `${CMD}`), and then, when this code still
+				// excluded strings, that "that command's name is the whole string:
+				// $prefix/bin/$tool".
 				//
 				// THIS IS NOT A DIVERGENCE FROM PYTHON AND JAVASCRIPT, though it was
 				// argued here as one. This code used to return "" for `$cmd`, citing
 				// python `fns[k]()` and javascript `obj[k]()`, which are both unnamed
 				// (measured, while `foo()` is named in each). The citation was the
 				// mistake. The house rule is that a callee with NO NAME IN THE SOURCE
-				// gets an empty name, and `$cmd` has one. Teague made the distinction on
-				// 2026-11-18; four ways the two cases differ:
+				// gets an empty name, and `$cmd` has one. Four ways the two cases
+				// differ:
 				//
 				//   1. `$cmd` names ONE variable, written right there. `fns[k]` is a
 				//      compound expression -- two variables and a subscript -- and no
@@ -105,25 +143,38 @@ string BashAdapter::ExtractNodeName(TSNode node, const string &content) const {
 				//      same file (`cmd=/usr/bin/foo`, `: ${CC:=gcc}`). `fns[k]`
 				//      essentially never does.
 				//
+				// LOOKING FOR ONE IDENTIFIER WAS THE SECOND MISTAKE. This code used to
+				// take the `word` child, then a `simple_expansion` or `expansion` child,
+				// and leave everything else unnamed -- which read `"$prefix/bin/$tool"`
+				// as "no single identifier names the callee, so no name". The whole
+				// written form is the name, so `command_name`'s own text answers every
+				// one of those shapes: a word, either expansion spelling, a quoted or
+				// unquoted compound, and a raw string.
+				//
 				// "The name as written" is also already the convention for kotlin's
 				// parent types and jsx's `svg:circle`.
 				//
-				// `$VAR` is a simple_expansion; `${VAR}` is an expansion. Both are checked
-				// because the two spellings mean the same thing to a reader.
-				TSNode expansion = FindChildByTypeNode(name_node, "simple_expansion");
-				if (ts_node_is_null(expansion)) {
-					expansion = FindChildByTypeNode(name_node, "expansion");
+				// WHAT THE NAME MEANS HERE: it is an INDICATION OF AN UNEVALUATED NAME
+				// (Teague, 2026-11-18). The command that runs is the value, which is not
+				// knowable at parse time, so the name records the expression that
+				// produces it. The leading `$` is what lets a consumer tell the two
+				// apart, which is why it is kept rather than stripped with the quotes.
+				//
+				// THE ANSWER IS THEREFORE IMPERFECT ON PURPOSE. `$'ansi'` keeps its
+				// `$'...'` spelling, and `"$a"b` keeps its interior quotes, because only
+				// a matched outer pair comes off. These are bashisms, and the place to
+				// refine them is the semantic type refinements -- not a larger string
+				// rule here, which would trade one rough edge for several.
+				//
+				// THE ONE EXCEPTION IS A COMMAND SUBSTITUTION (#91): `$(which ls) -l`
+				// runs whatever `which ls` printed, so the outer command has no callee
+				// to name, and the inner command already carries `which` on its own row.
+				// test/sql/languages/bash_variable_named_command.test section 3 is the
+				// negative control, bare and inside a string.
+				if (HoldsCommandSubstitution(name_node)) {
+					return "";
 				}
-				if (!ts_node_is_null(expansion)) {
-					return ExtractNodeText(expansion, content);
-				}
-				// EVERYTHING ELSE STAYS UNNAMED, and the boundary is the point.
-				// `$(which ls) -l` is a command_substitution, not a variable, and its
-				// inner command already carries the name `which` on its own row -- naming
-				// the outer one would duplicate that fact. `"$cmd" arg` is a string, whose
-				// contents are not knowable. test/sql/languages/bash_variable_named_command.test
-				// section 3 is the negative control for both.
-				return "";
+				return StripOuterQuotes(ExtractNodeText(name_node, content));
 			}
 			if (node_type == "declaration_command") {
 				// declaration_command nests the variable name 2 levels deep:

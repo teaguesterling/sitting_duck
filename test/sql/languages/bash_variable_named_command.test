@@ -1,5 +1,5 @@
 # name: test/sql/languages/bash_variable_named_command.test
-# description: A bash command whose name is a variable expansion is named as written ($verbose)
+# description: A bash command's name is the text as written -- a variable, a string, or a compound
 # group: [languages]
 
 # WHY THIS FILE EXISTS
@@ -36,21 +36,50 @@
 # "The name as written" is also the convention for kotlin's parent types and
 # jsx's `svg:circle`.
 #
-# SO THIS FILE PINS THE BOUNDARY, which follows from the rule rather than being
-# chosen. A VARIABLE has a name in the source, so it is named. A command
-# SUBSTITUTION has no single callee at all (#91), so there is no name to take. A
-# STRING may hold a compound like `"$prefix/bin/$tool"`, so no single identifier
-# names the callee even when one happens to look like it does.
+# THE RULE WIDENED AGAIN ON 2026-11-18, AND THIS FILE'S FIRST VERSION HAD THE
+# BOUNDARY WRONG. It argued that a STRING in command position stays unnamed,
+# because a string may hold a compound like `"$prefix/bin/$tool"` and no single
+# identifier in it names the callee. Teague's answer: "that command's name is
+# the whole string: $prefix/bin/$tool". Looking for ONE identifier was the
+# mistake -- the name is the whole written form, exactly as it is for `${CMD}`.
+#
+# SO THE NAME IS THE TEXT OF THE `command_name` NODE, with one exception. The
+# quote characters come off, because they are shell syntax and not part of the
+# name: `"$cmd"` and `$cmd` name the same command and must join to each other,
+# and `'ls'` is the command `ls`. The unquoted compound `$prefix/bin/$tool` is a
+# `concatenation` node rather than a string, and takes the same answer -- which
+# is the form Teague wrote.
+#
+# WHAT THE NAME MEANS IN THESE CASES, which is the point of keeping the `$`:
+# it is AN INDICATION OF AN UNEVALUATED NAME (Teague, 2026-11-18). The command
+# that runs is the value, and the value is not knowable here, so the name
+# records the expression that will produce it. A consumer can tell the two
+# apart by the leading `$`: `date` ran `date`, and `$CC` ran whatever `$CC`
+# held.
+#
+# SO THE ANSWER IS DELIBERATELY IMPERFECT, and that is accepted rather than
+# overlooked. These are bashisms. Row 5 is the clearest case: an ANSI-C string
+# keeps its `$'...'` spelling, because the text starts with `$` and only a
+# MATCHED outer pair is stripped. `ansi` is arguable, and nothing in the corpus
+# exercises the shape, so no fixture measured it either way until this row.
+# Teague's reading: imperfect is fine at this layer, and the refinement belongs
+# in the semantic type refinements rather than in this string. Pinned here
+# because an undecided edge is how this file's guard control got voided twice in
+# one day.
+#
+# THE ONE EXCEPTION IS A COMMAND SUBSTITUTION, which has no single callee at all
+# (#91). `$(which ls) -l` runs whatever `which ls` printed, and the inner
+# command already carries `which` on its own row. A substitution inside a string
+# (`"$(which ls)" -l`) is the same fact wearing quotes, so it is unnamed too.
 #
 # HOW TO READ A FAILURE HERE
 #
 #   Section 1 fails -> ordinary command naming broke. `date +%s` is the #140
 #                      regression guard: FIND_IDENTIFIER once named the first
 #                      ARGUMENT, so `date +%s` came out as `+%s`.
-#   Section 2 fails -> the variable forms stopped being named as written.
+#   Section 2 fails -> the written forms stopped being named as written.
 #   Section 3 fails -> the boundary moved. Something is now naming a command
-#                      substitution or a string, which this change did NOT ask
-#                      for.
+#                      substitution, which has no single callee to name.
 #   Section 4 fails -> the real fixture regressed, or the conformance corpus
 #                      stopped exercising this shape.
 
@@ -73,7 +102,7 @@ date +%s	date
 echo hi	echo
 
 # =============================================================================
-# 2. A variable in command position is named AS WRITTEN
+# 2. The command name is the text AS WRITTEN
 # =============================================================================
 # Both expansion spellings: `$VAR` is a simple_expansion, `${VAR}` is an
 # expansion. The leading `$` is kept deliberately -- it is what tells a consumer
@@ -94,6 +123,29 @@ $DEBUG	$DEBUG
 $verbose	$verbose
 ${CMD}	${CMD}
 
+# A STRING, a RAW STRING and an unquoted COMPOUND take the same answer, with the
+# quote characters removed. Labels are numbered so the sort order is readable
+# rather than a byte-order puzzle.
+query TT
+SELECT '1 "$cmd"' AS src, name FROM parse_ast('"$cmd" arg', 'bash') WHERE type = 'command'
+UNION ALL
+SELECT '2 ''ls''', name FROM parse_ast('''ls'' -l', 'bash') WHERE type = 'command'
+UNION ALL
+SELECT '3 $prefix/bin/$tool', name FROM parse_ast('$prefix/bin/$tool arg', 'bash')
+  WHERE type = 'command'
+UNION ALL
+SELECT '4 "$prefix/bin/$tool"', name FROM parse_ast('"$prefix/bin/$tool" arg', 'bash')
+  WHERE type = 'command'
+UNION ALL
+SELECT '5 $''ansi''', name FROM parse_ast('$''ansi'' arg', 'bash') WHERE type = 'command'
+ORDER BY src;
+----
+1 "$cmd"	$cmd
+2 'ls'	ls
+3 $prefix/bin/$tool	$prefix/bin/$tool
+4 "$prefix/bin/$tool"	$prefix/bin/$tool
+5 $'ansi'	$'ansi'
+
 # The other command on each of those lines is unaffected and still names
 # normally. This is why section 2 filters on `$`: a line holds two commands.
 query TT
@@ -108,37 +160,41 @@ with $DEBUG	:
 with $verbose	echo
 
 # =============================================================================
-# 3. THE BOUNDARY: a nested command and a string are NOT named
+# 3. THE BOUNDARY: a command substitution is NOT named
 # =============================================================================
-# This section is the negative control. Without it, an implementation that names
-# every non-`word` name position would pass section 2 and be wrong.
+# This section is the negative control. Without it, an implementation that took
+# the written text of every name position would pass section 2 and be wrong.
 #
-# `$(which ls)` is a command_substitution, not a variable. Its inner command is
-# already named `which` on its own row, so naming the outer one would duplicate
-# a fact and invent a name for a node that has none.
-#
-# `"$cmd"` is a string. Its contents are not knowable, and it is not a variable
-# expansion node.
+# `$(which ls)` is a command_substitution. The command that runs is whatever
+# `which ls` printed, and the inner command is already named `which` on its own
+# row, so naming the outer one would invent a name for a node that has none.
+# Quoting it changes nothing, which is why the second row is here: a string that
+# HOLDS a substitution is the same fact.
 
 query TTI
-SELECT '$(which ls) -l' AS src, name, len(name) AS n
+SELECT '1 $(which ls) -l' AS src, name, len(name) AS n
 FROM parse_ast('$(which ls) -l', 'bash')
 WHERE type = 'command' AND name = ''
 UNION ALL
-SELECT '"$cmd" arg', name, len(name)
-FROM parse_ast('"$cmd" arg', 'bash')
+SELECT '2 "$(which ls)" -l', name, len(name)
+FROM parse_ast('"$(which ls)" -l', 'bash')
 WHERE type = 'command' AND name = ''
 ORDER BY src;
 ----
-"$cmd" arg	(empty)	0
-$(which ls) -l	(empty)	0
+1 $(which ls) -l	(empty)	0
+2 "$(which ls)" -l	(empty)	0
 
-# The inner command of the substitution is still named, so the fact is not lost.
+# The inner command of each substitution is still named, so the fact is not lost.
 query TT
-SELECT 'inner' AS which_row, name FROM parse_ast('$(which ls) -l', 'bash')
-WHERE type = 'command' AND name <> '';
+SELECT '1 bare' AS which_row, name FROM parse_ast('$(which ls) -l', 'bash')
+WHERE type = 'command' AND name <> ''
+UNION ALL
+SELECT '2 quoted', name FROM parse_ast('"$(which ls)" -l', 'bash')
+WHERE type = 'command' AND name <> ''
+ORDER BY which_row;
 ----
-inner	which
+1 bare	which
+2 quoted	which
 
 # =============================================================================
 # 4. The real fixture: every command in it is now named

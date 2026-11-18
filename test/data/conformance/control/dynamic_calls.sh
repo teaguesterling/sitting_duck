@@ -3,39 +3,36 @@
 # on callee-name binding (test/sql/bugs/issue_88_89_callee_name_and_guards.test
 # and test/sql/conformance/no_silent_empty.test).
 #
-# WHY THIS FILE EXISTS. The guard was first proven with
-# test/data/call_extraction/calls.sh, whose `date` and `echo` commands were
-# unnamed. #140a named them, so that source became ANSWERABLE and could no
-# longer show the guard raising. A guard with no source that triggers it is not
-# a tested guard, so the shape moved here rather than being deleted.
+# WHAT THIS FILE MUST BE. The guard raises only when NO call node in the source
+# carries a name, so every call node here must be unnamed. One named call node
+# satisfies the guard's EXISTS, the guard stops raising, and three `statement
+# error` assertions assert an error that can no longer happen.
 #
-# EVERY call node below must be unnamed, or this control silently stops being
-# one: a single named call node satisfies the guard's EXISTS and the guard stops
-# raising.
+# IT WAS VOIDED TWICE IN ONE DAY, BOTH TIMES BY A NAMING RULING. The shapes it
+# relied on kept becoming named:
 #
-# THE SET OF UNNAMED SHAPES NARROWED ON 2026-11-18, and this file was rewritten
-# because of it. Teague ruled that a bash command named by a VARIABLE is named as
-# written, so `$cmd --flag` now reports `$cmd` and `$runner` reports `$runner`.
-# Both were in this file and both had to go. What remains are the two shapes
-# that are still unnamed, for reasons the ruling does not touch:
+#   #140a    named `date` and `echo` in test/data/call_extraction/calls.sh, so
+#            the guard's original source became answerable. The shape moved here.
+#   2026-11-18a  a bash command named by a VARIABLE is named as written, so
+#                `$cmd --flag` reports `$cmd`. Rewritten to use strings.
+#   2026-11-18b  "that command's name is the whole string: $prefix/bin/$tool".
+#                `"$prog" arg` reports `$prog`. The strings went too.
 #
-#   "$prog" arg        a STRING in command position. Its contents are not
-#                      knowable, and it is not a variable-expansion node.
-#   $("$runner")       a COMMAND SUBSTITUTION has no single callee at all (#91),
-#                      and its inner command is itself a string, so neither the
-#                      outer nor the inner node carries a name. A BARE
-#                      $(...) inner callee like $($runner) would now name the
-#                      inner one.
+# SO THIS VERSION HOLDS NO `command` NODE AT ALL, which is why it should be the
+# last rewrite. `$(<file)` is a command substitution whose body is a REDIRECT:
+# measured, it parses as one `command_substitution` (COMPUTATION_CALL) wrapping
+# a `file_redirect`, with no `command` inside it and nothing anywhere that a
+# name could be read from. #91 holds that a substitution has no single callee,
+# and here there is not even an inner command to name instead. A naming rule
+# cannot reach this file, because naming needs a name position and this file
+# has none.
 #
-# DO NOT ADD, because each would void this control:
-#   * a literal `cmd arg`           -- named by the `word` path
-#   * a bare `$cmd` or `${cmd}`     -- named as written since 2026-11-18
-#   * $($runner) or $(cmd)          -- the INNER command gets named
+# DO NOT ADD any command at all. A single `cmd arg`, `$cmd`, `"$cmd"`, `'cmd'`,
+# or `$(cmd)` -- whose INNER command is named -- voids the control.
 #
 # Measured after each change: `SELECT count(*) FILTER (WHERE name <> '')` over
-# this file's `command` rows must be 0. test/sql/languages/bash_variable_named_command.test
-# section 3 pins the two surviving shapes directly, so a later change that names
-# them fails there as well as here.
-"$prog" arg
-"${alt}" x
-result=$("$runner")
+# this file's call rows must be 0, and the row count must be > 0. A file with no
+# call nodes would make the guards raise for a different reason.
+first=$(<one.txt)
+second=$(<two.txt)
+third=`<three.txt`
