@@ -240,7 +240,7 @@ set(EXTENSION_NAME ${TARGET_NAME}_extension)
 set(LOADABLE_EXTENSION_NAME ${TARGET_NAME}_loadable_extension)
 
 project(${TARGET_NAME})
-include_directories(src/include)
+include_directories(core/include)
 # Generated built-in language registration table (sitting_duck_builtin_languages.def)
 include_directories(${SD_LANGUAGE_DEF_INCLUDE_DIR})
 # Include tree-sitter headers - both public API and internal headers
@@ -310,35 +310,35 @@ if(EXISTS "${SD_YAML_PARSER_DIR}/tree_sitter/parser.h")
 endif()
 
 set(EXTENSION_SOURCES
-    src/sitting_duck_extension.cpp
-    src/language_adapter.cpp
-    src/language_adapter_registry_init.cpp
+    core/sitting_duck_extension.cpp
+    core/language_adapter.cpp
+    core/language_adapter_registry_init.cpp
     # Per-language adapter sources for the enabled languages (cmake/BuiltinLanguages.cmake)
     ${SD_LANGUAGE_ADAPTER_SOURCES}
     # Runtime grammar registration (always built, independent of enabled languages)
-    src/language_adapters/dynamic_language_adapter.cpp
-    src/dynamic_library_loader.cpp
-    src/register_language_function.cpp
-    src/language_config_json.cpp
+    core/language_adapters/dynamic_language_adapter.cpp
+    core/dynamic_library_loader.cpp
+    core/register_language_function.cpp
+    core/language_config_json.cpp
     third_party/yyjson/yyjson.c
-    src/read_ast_streaming_function.cpp
-    src/ast_sql_macros.cpp
-    src/parse_ast_function.cpp
-    src/parse_ast_list_function.cpp
-    src/unified_ast_backend.cpp
-    src/ast_parsing_task.cpp
-    src/ast_type.cpp
-    src/semantic_types.cpp
-    src/semantic_type_functions.cpp
-    src/semantic_type_logical_type.cpp
-    src/ast_file_utils.cpp
-    src/ast_supported_languages_function.cpp
-    src/ast_semantic_aliases_function.cpp
-    src/ast_type_map_function.cpp
-    src/native_context_extraction.cpp
-    src/unparse_rules.cpp
-    src/ast_source_bytes_function.cpp
-    src/ast_copy_function.cpp
+    core/read_ast_streaming_function.cpp
+    core/ast_sql_macros.cpp
+    core/parse_ast_function.cpp
+    core/parse_ast_list_function.cpp
+    core/unified_ast_backend.cpp
+    core/ast_parsing_task.cpp
+    core/ast_type.cpp
+    core/semantic_types.cpp
+    core/semantic_type_functions.cpp
+    core/semantic_type_logical_type.cpp
+    core/ast_file_utils.cpp
+    core/ast_supported_languages_function.cpp
+    core/ast_semantic_aliases_function.cpp
+    core/ast_type_map_function.cpp
+    core/native_context_extraction.cpp
+    core/unparse_rules.cpp
+    core/ast_source_bytes_function.cpp
+    core/ast_copy_function.cpp
     # Parser source files for the enabled languages - from PARSER_SOURCE_DIR
     # (either generated_parsers/ or grammars/), see cmake/BuiltinLanguages.cmake
     ${SD_LANGUAGE_PARSER_SOURCES}

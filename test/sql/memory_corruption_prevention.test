@@ -83,7 +83,7 @@ Invalid context parameter '123'. Valid values are: 'none', 'node_types_only', 'n
 # ===================================================
 query I
 SELECT COUNT(*) > 100 as processes_large_file
-FROM read_ast('src/unified_ast_backend.cpp', 'cpp', context := 'native')
+FROM read_ast('core/unified_ast_backend.cpp', 'cpp', context := 'native')
 LIMIT 1;
 ----
 true
@@ -94,11 +94,11 @@ query I
 SELECT (exec1.count = exec2.count) as consistent_large_processing
 FROM (
     SELECT COUNT(*) as count
-    FROM read_ast('src/unified_ast_backend.cpp', 'cpp', context := 'native')
+    FROM read_ast('core/unified_ast_backend.cpp', 'cpp', context := 'native')
 ) exec1,
 (
     SELECT COUNT(*) as count
-    FROM read_ast('src/unified_ast_backend.cpp', 'cpp', context := 'native')
+    FROM read_ast('core/unified_ast_backend.cpp', 'cpp', context := 'native')
 ) exec2;
 ----
 true
@@ -169,7 +169,7 @@ FROM (
         semantic_type,
         name,
         descendant_count
-    FROM read_ast('src/unified_ast_backend.cpp', 'cpp', context := 'native')
+    FROM read_ast('core/unified_ast_backend.cpp', 'cpp', context := 'native')
     WHERE descendant_count > 5
     ORDER BY descendant_count DESC
 ) 

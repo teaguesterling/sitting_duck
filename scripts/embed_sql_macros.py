@@ -105,7 +105,7 @@ def extract_macro_docs(sql_dir, sql_files):
         # description, and only Windows is affected. MEASURED: #170, Windows job
         # 122541581963 printed `described=57/57`, so the TABLE held 57 entries,
         # and ast_unparse_exact_splice was not among them
-        # (src/sql_macros/ast_unparse.sql:525). Reproduced on Linux by forcing
+        # (core/sql_macros/ast_unparse.sql:525). Reproduced on Linux by forcing
         # the cp1252 decode: 57 entries, same macro missing.
         lines = open(path, 'r', encoding='utf-8', errors='replace').read().splitlines()
         for idx, line in enumerate(lines):
@@ -229,7 +229,7 @@ def generate_header(sql_dir, output_file, sql_files):
     """
 
     header_content = """// Auto-generated file - DO NOT EDIT
-// Generated from SQL macro files in src/sql_macros/
+// Generated from SQL macro files in core/sql_macros/
 // Run: python scripts/embed_sql_macros.py
 // Note: Large files are split into chunks to handle MSVC's 16KB string literal limit
 
@@ -279,7 +279,7 @@ static const std::vector<std::pair<std::string, std::string>> EMBEDDED_SQL_MACRO
     # RegisterASTSQLMacros to decorate the catalog entries after creation.
     docs = extract_macro_docs(sql_dir, sql_files)
     header_content += """// Per-macro documentation, lifted from the `-- <name>: <summary>` banners and
-// `-- Usage:` blocks in src/sql_macros/*.sql. Macros without a banner naming
+// `-- Usage:` blocks in core/sql_macros/*.sql. Macros without a banner naming
 // themselves are absent rather than guessed at -- see extract_macro_docs().
 struct EmbeddedMacroDoc {
 \tconst char *name;
@@ -317,8 +317,8 @@ if __name__ == "__main__":
     # Get paths relative to script location
     script_dir = Path(__file__).parent
     project_root = script_dir.parent
-    sql_dir = project_root / "src" / "sql_macros"
-    output_file = project_root / "src" / "include" / "embedded_sql_macros.hpp"
+    sql_dir = project_root / "core" / "sql_macros"
+    output_file = project_root / "core" / "include" / "embedded_sql_macros.hpp"
 
     layout_path = project_root / "spec" / "layout" / "layout.yaml"
 

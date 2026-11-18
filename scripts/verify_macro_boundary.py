@@ -198,9 +198,9 @@ def find_violations(edges, owner, side):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('--root', type=Path, default=DEFAULT_ROOT,
-                    help='tree holding spec/layout/layout.yaml and src/sql_macros (default: this repo)')
+                    help='tree holding spec/layout/layout.yaml and core/sql_macros (default: this repo)')
     root = ap.parse_args(argv).root
-    layout_path, sql_dir = root / 'spec' / 'layout' / 'layout.yaml', root / 'src' / 'sql_macros'
+    layout_path, sql_dir = root / 'spec' / 'layout' / 'layout.yaml', root / 'core' / 'sql_macros'
 
     try:
         embed_sql_macros.load_manifest(layout_path)           # validates every entry

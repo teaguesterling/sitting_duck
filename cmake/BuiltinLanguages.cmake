@@ -15,9 +15,9 @@
 #
 # Unknown names fail the configure step. The enabled set is emitted as an
 # X-macro table (sitting_duck_builtin_languages.def) consumed by
-# src/language_adapter_registry_init.cpp, so registration and parse dispatch
+# core/language_adapter_registry_init.cpp, so registration and parse dispatch
 # compile only the enabled adapters. Runtime extension/alias maps are filtered
-# through the adapter registry (see src/ast_file_utils.cpp), so an excluded
+# through the adapter registry (see core/ast_file_utils.cpp), so an excluded
 # language behaves exactly like an unknown one.
 #
 # This is groundwork for grammar packs / the slim "sitting_duckling" build:

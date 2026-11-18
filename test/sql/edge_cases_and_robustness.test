@@ -45,7 +45,7 @@ SELECT COUNT(*) FROM parse_ast('	', 'cpp');
 # ======================================
 statement ok
 SELECT COUNT(*) > 100 as handles_large_content
-FROM read_ast('src/unified_ast_backend.cpp', 'cpp', context := 'native');
+FROM read_ast('core/unified_ast_backend.cpp', 'cpp', context := 'native');
 
 # Test 5: Unicode and special characters
 # ======================================
@@ -223,15 +223,15 @@ SELECT
      second_run.count = third_run.count) as memory_pattern_stable
 FROM (
     SELECT COUNT(*) as count
-    FROM read_ast('src/unified_ast_backend.cpp', 'cpp', context := 'native')
+    FROM read_ast('core/unified_ast_backend.cpp', 'cpp', context := 'native')
 ) first_run,
 (
     SELECT COUNT(*) as count
-    FROM read_ast('src/unified_ast_backend.cpp', 'cpp', context := 'native')
+    FROM read_ast('core/unified_ast_backend.cpp', 'cpp', context := 'native')
 ) second_run,
 (
     SELECT COUNT(*) as count
-    FROM read_ast('src/unified_ast_backend.cpp', 'cpp', context := 'native')
+    FROM read_ast('core/unified_ast_backend.cpp', 'cpp', context := 'native')
 ) third_run;
 ----
 true

@@ -1,5 +1,5 @@
 // Auto-generated file - DO NOT EDIT
-// Generated from SQL macro files in src/sql_macros/
+// Generated from SQL macro files in core/sql_macros/
 // Run: python scripts/embed_sql_macros.py
 // Note: Large files are split into chunks to handle MSVC's 16KB string literal limit
 
@@ -8215,7 +8215,7 @@ CREATE OR REPLACE MACRO ast_unparse_exact_code(source_code, language) AS TABLE
 };
 
 // Per-macro documentation, lifted from the `-- <name>: <summary>` banners and
-// `-- Usage:` blocks in src/sql_macros/*.sql. Macros without a banner naming
+// `-- Usage:` blocks in core/sql_macros/*.sql. Macros without a banner naming
 // themselves are absent rather than guessed at -- see extract_macro_docs().
 struct EmbeddedMacroDoc {
 	const char *name;
