@@ -150,11 +150,11 @@ FROM read_ast('test/data/python/simple.py', 'python', context := 'native');
 query I
 SELECT COUNT(DISTINCT node_count) = 1 as is_stable
 FROM (
-    SELECT COUNT(*) as node_count FROM read_ast('src/unified_ast_backend.cpp', 'cpp', context := 'native')
+    SELECT COUNT(*) as node_count FROM read_ast('core/unified_ast_backend.cpp', 'cpp', context := 'native')
     UNION ALL
-    SELECT COUNT(*) as node_count FROM read_ast('src/unified_ast_backend.cpp', 'cpp', context := 'native')
+    SELECT COUNT(*) as node_count FROM read_ast('core/unified_ast_backend.cpp', 'cpp', context := 'native')
     UNION ALL
-    SELECT COUNT(*) as node_count FROM read_ast('src/unified_ast_backend.cpp', 'cpp', context := 'native')
+    SELECT COUNT(*) as node_count FROM read_ast('core/unified_ast_backend.cpp', 'cpp', context := 'native')
 );
 ----
 1
