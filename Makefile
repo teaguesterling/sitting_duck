@@ -149,7 +149,7 @@ endif
 # counts asserted in tests. Formatting them shifts lines and adds nodes,
 # breaking those assertions.
 
-FORMAT_DIRS := src test/sql test/unittest
+FORMAT_DIRS := core test/sql test/unittest
 
 format-check:
 	python3 duckdb/scripts/format.py --all --check --directories $(FORMAT_DIRS)

@@ -159,7 +159,7 @@ void RegisterASTSQLMacros(ExtensionLoader &loader) {
 					// is how this class of bug stays invisible.
 					throw InternalException(
 					    "sitting_duck: documented macro '%s' is not in the catalog; "
-					    "EMBEDDED_MACRO_DOCS is out of sync with src/sql_macros/ "
+					    "EMBEDDED_MACRO_DOCS is out of sync with core/sql_macros/ "
 					    "(re-run scripts/embed_sql_macros.py)",
 					    doc.name);
 				}
