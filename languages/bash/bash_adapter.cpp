@@ -73,13 +73,42 @@ string BashAdapter::ExtractNodeName(TSNode node, const string &content) const {
 				if (ts_node_is_null(name_node)) {
 					return "";
 				}
-				// Only a literal `word` is a statically knowable command name. A
-				// `simple_expansion` callee (`$verbose && ...`, `if $DEBUG; then`), a string or a
-				// command substitution resolves at run time, and naming it would record the
-				// VARIABLE rather than the command -- the same class of wrong name as `+%s`.
-				// Python returns "" for `fns[k]()` and JavaScript for `obj[k]()`, so an empty
-				// name is the house answer for a dynamic callee, not a gap.
-				return FindChildByType(name_node, content, "word");
+				// A literal `word` is a statically knowable command name, and is the
+				// common case.
+				string word = FindChildByType(name_node, content, "word");
+				if (!word.empty()) {
+					return word;
+				}
+				// A VARIABLE in command position is named AS WRITTEN, `$` included:
+				// `$verbose && ...` is named `$verbose`, `${CMD} arg` is named `${CMD}`.
+				//
+				// THIS DIVERGES FROM PYTHON AND JAVASCRIPT ON PURPOSE. Both return "" for
+				// a dynamic callee -- measured: python `fns[k]()` and javascript
+				// `obj[k]()` are both unnamed, while `foo()` is named in each -- and this
+				// code previously returned "" for the same reason, arguing that naming it
+				// records the VARIABLE rather than the command. Teague ruled otherwise on
+				// 2026-11-18, having been shown that reasoning and that measurement:
+				// `$verbose` tells a reader more than "" does, the leading `$` is itself
+				// the signal that the callee is dynamic, and "the name as written" is
+				// already the convention for kotlin's parent types and jsx's
+				// `svg:circle`. The divergence is bash-only and deliberate.
+				//
+				// `$VAR` is a simple_expansion; `${VAR}` is an expansion. Both are checked
+				// because the two spellings mean the same thing to a reader.
+				TSNode expansion = FindChildByTypeNode(name_node, "simple_expansion");
+				if (ts_node_is_null(expansion)) {
+					expansion = FindChildByTypeNode(name_node, "expansion");
+				}
+				if (!ts_node_is_null(expansion)) {
+					return ExtractNodeText(expansion, content);
+				}
+				// EVERYTHING ELSE STAYS UNNAMED, and the boundary is the point.
+				// `$(which ls) -l` is a command_substitution, not a variable, and its
+				// inner command already carries the name `which` on its own row -- naming
+				// the outer one would duplicate that fact. `"$cmd" arg` is a string, whose
+				// contents are not knowable. test/sql/languages/bash_variable_named_command.test
+				// section 3 is the negative control for both.
+				return "";
 			}
 			if (node_type == "declaration_command") {
 				// declaration_command nests the variable name 2 levels deep:
