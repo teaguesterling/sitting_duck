@@ -1,0 +1,152 @@
+# name: test/sql/languages/bash_variable_named_command.test
+# description: A bash command whose name is a variable expansion is named as written ($verbose)
+# group: [languages]
+
+# WHY THIS FILE EXISTS
+#
+# `$verbose && echo "on"` and `if $DEBUG; then` are the idiomatic bash boolean:
+# a variable holding `true` or `false`, used in command position. The command
+# that actually runs is the variable's RUNTIME value, so there is no statically
+# knowable command name.
+#
+# THE PREVIOUS ANSWER WAS AN EMPTY NAME, ON PURPOSE. languages/bash/bash_adapter.cpp
+# returned "" for this shape, with the reasoning that naming it would record the
+# VARIABLE rather than the command, and that python (`fns[k]()`) and javascript
+# (`obj[k]()`) both return "" for a dynamic callee -- so an empty name was the
+# house answer across three languages.
+#
+# TEAGUE RULED OTHERWISE on 2026-11-18, having been shown that reasoning and the
+# measured python/javascript behaviour: name it as written. `$verbose` tells a
+# reader more than "" does, and "the name as written" is the convention for
+# kotlin's parent types and for jsx's `svg:circle`. The divergence from python
+# and javascript is deliberate and bash-only.
+#
+# SO THIS FILE PINS THE BOUNDARY, which is the part a later change will get
+# wrong. A VARIABLE is named. A nested command is not, because it is not a
+# variable and its inner command is already named on its own row. A string is
+# not, because its contents are not knowable.
+#
+# HOW TO READ A FAILURE HERE
+#
+#   Section 1 fails -> ordinary command naming broke. `date +%s` is the #140
+#                      regression guard: FIND_IDENTIFIER once named the first
+#                      ARGUMENT, so `date +%s` came out as `+%s`.
+#   Section 2 fails -> the variable forms stopped being named as written.
+#   Section 3 fails -> the boundary moved. Something is now naming a command
+#                      substitution or a string, which this change did NOT ask
+#                      for.
+#   Section 4 fails -> the real fixture regressed, or the conformance corpus
+#                      stopped exercising this shape.
+
+require sitting_duck
+
+# =============================================================================
+# 1. Ordinary commands still name correctly, including #140's guard
+# =============================================================================
+# First, because every assertion below reads the same column. `date +%s` is here
+# because naming the first argument is the specific wrong answer this adapter
+# code was written to stop.
+
+query TT
+SELECT 'echo hi' AS src, name FROM parse_ast('echo hi', 'bash') WHERE type = 'command'
+UNION ALL
+SELECT 'date +%s', name FROM parse_ast('date +%s', 'bash') WHERE type = 'command'
+ORDER BY src;
+----
+date +%s	date
+echo hi	echo
+
+# =============================================================================
+# 2. A variable in command position is named AS WRITTEN
+# =============================================================================
+# Both expansion spellings: `$VAR` is a simple_expansion, `${VAR}` is an
+# expansion. The leading `$` is kept deliberately -- it is what tells a consumer
+# the callee is dynamic.
+
+query TT
+SELECT '$verbose' AS src, name FROM parse_ast('$verbose && echo x', 'bash')
+  WHERE type = 'command' AND name LIKE '$%'
+UNION ALL
+SELECT '$DEBUG', name FROM parse_ast('if $DEBUG; then :; fi', 'bash')
+  WHERE type = 'command' AND name LIKE '$%'
+UNION ALL
+SELECT '${CMD}', name FROM parse_ast('${CMD} arg', 'bash')
+  WHERE type = 'command' AND name LIKE '$%'
+ORDER BY src;
+----
+${CMD}	${CMD}
+$DEBUG	$DEBUG
+$verbose	$verbose
+
+# The other command on each of those lines is unaffected and still names
+# normally. This is why section 2 filters on `$`: a line holds two commands.
+query TT
+SELECT 'with $verbose' AS src, name FROM parse_ast('$verbose && echo x', 'bash')
+  WHERE type = 'command' AND name NOT LIKE '$%'
+UNION ALL
+SELECT 'with $DEBUG', name FROM parse_ast('if $DEBUG; then :; fi', 'bash')
+  WHERE type = 'command' AND name NOT LIKE '$%'
+ORDER BY src;
+----
+with $DEBUG	:
+with $verbose	echo
+
+# =============================================================================
+# 3. THE BOUNDARY: a nested command and a string are NOT named
+# =============================================================================
+# This section is the negative control. Without it, an implementation that names
+# every non-`word` name position would pass section 2 and be wrong.
+#
+# `$(which ls)` is a command_substitution, not a variable. Its inner command is
+# already named `which` on its own row, so naming the outer one would duplicate
+# a fact and invent a name for a node that has none.
+#
+# `"$cmd"` is a string. Its contents are not knowable, and it is not a variable
+# expansion node.
+
+query TTI
+SELECT '$(which ls) -l' AS src, name, len(name) AS n
+FROM parse_ast('$(which ls) -l', 'bash')
+WHERE type = 'command' AND name = ''
+UNION ALL
+SELECT '"$cmd" arg', name, len(name)
+FROM parse_ast('"$cmd" arg', 'bash')
+WHERE type = 'command' AND name = ''
+ORDER BY src;
+----
+"$cmd" arg	(empty)	0
+$(which ls) -l	(empty)	0
+
+# The inner command of the substitution is still named, so the fact is not lost.
+query TT
+SELECT 'inner' AS which_row, name FROM parse_ast('$(which ls) -l', 'bash')
+WHERE type = 'command' AND name <> '';
+----
+inner	which
+
+# =============================================================================
+# 4. The real fixture: every command in it is now named
+# =============================================================================
+# test/data/bash/simple.sh is in the conformance corpus, and its three
+# `$system_ok` / `$verbose` / `$DEBUG` commands are what made the kit's
+# CALL-NAMED check fail for bash. The count going to zero here is the same fact
+# the kit reports.
+
+query II
+SELECT count(*) FILTER (WHERE name = '' OR name IS NULL) AS unnamed,
+       count(*)                                          AS total
+FROM read_ast('test/data/bash/simple.sh')
+WHERE type = 'command';
+----
+0	95
+
+# And the three are named as written, which is the behaviour change itself.
+query TI
+SELECT name, count(*) AS n
+FROM read_ast('test/data/bash/simple.sh')
+WHERE type = 'command' AND name LIKE '$%'
+GROUP BY name ORDER BY name;
+----
+$DEBUG	1
+$system_ok	1
+$verbose	1
