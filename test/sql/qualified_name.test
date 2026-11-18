@@ -136,8 +136,15 @@ bar	C[Foo] F[bar]
 #
 # The assignment does define something -- `self.name` -- and the `attribute`
 # node carries that text. It has no NAME_DEFINITION role flag, so it is not a
-# definition yet and gets no qualified_name. That gap is #288. When #288
-# lands a row appears here again, and it will not be `V[name]`.
+# definition yet and gets no qualified_name.
+#
+# CORRECTED (#288). This comment predicted that fixing #288 would bring a row
+# back here. It does not, and that was the wrong issue: #288 was fixed in
+# ast_definitions() by reading the name role, and no rule gives an attribute
+# target that role. qualified_name is built in the walker from the semantic
+# type, which #288 did not change either. Whether `self.name = ...` defines a
+# name is an open question with no decision yet; until one exists, the two
+# rows below are the whole answer.
 query I
 SELECT ast_qualified_name_as_string(qualified_name)
 FROM read_ast('test/data/python/qualified_names.py', 'python')

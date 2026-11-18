@@ -16,8 +16,12 @@ LOAD sitting_duck;
 # The `assignment` row below is the #276 duplicate: the container still claims
 # NAME_DEFINITION with no name, and ast_definitions() drops it through its
 # `name != ''` filter -- the name is an EMPTY STRING, not NULL, which is what
-# that filter keys on. It is pinned here deliberately rather than hidden, so
-# that the count changes visibly when #276 is fixed.
+# that filter keys on. It is pinned here deliberately rather than hidden.
+#
+# CORRECTED (#276). This said the count would change when #276 was fixed. It
+# does not: #276 was fixed in ast_definitions(), which now collapses a
+# same-name container into one row, and the flags this query reads are
+# unchanged. This empty-named container never reached the macro anyway.
 # ---------------------------------------------------------------------------
 query TTI
 SELECT type, CASE WHEN name IS NULL THEN '<null>' WHEN name = '' THEN '<empty>' ELSE name END, COUNT(*)

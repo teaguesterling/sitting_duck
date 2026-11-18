@@ -162,9 +162,11 @@ package_clause	m	1
 # to define `value`. #273's fix stops that scan, so `visible` is now 0 and the
 # second column measures what it says it measures.
 #
-# When #288 is fixed, `visible` rises to 3 -- the three flagged names, not 4.
-# The fixture is sample_app.py, which 14 test files read, so a change to it
-# will also surface here.
+# #288 FIXED. `visible` is now 3 -- the three flagged names, not 4, exactly as
+# predicted above. ast_definitions() selects by name role (rule B), so the gap
+# this block pinned is closed, and the two columns agree. The fixture is
+# sample_app.py, which 14 test files read, so a change to it will also surface
+# here.
 # ---------------------------------------------------------------------------
 query II
 SELECT
@@ -173,4 +175,4 @@ SELECT
   (SELECT COUNT(*) FROM ast_definitions('test/data/python/sample_app.py')
      WHERE name IN ('key', 'value')) AS visible;
 ----
-3	0
+3	3

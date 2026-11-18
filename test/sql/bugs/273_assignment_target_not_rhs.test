@@ -27,8 +27,10 @@
 # WHAT THIS FILE DELIBERATELY DOES NOT ASSERT. After the fix, the `attribute`
 # target node still carries the correct dotted name (`self.path`) and still
 # lacks the NAME_DEFINITION role flag, so it is still absent from
-# ast_definitions(). That is #288's shape, not this one. This file pins only
-# that the assignment stops claiming the right-hand side.
+# ast_definitions(). (Since #288 the macro reads the role flag, and still
+# does not list it: no rule gives an attribute target that role. Whether it
+# should is an open question with no decision yet.) This file pins only that
+# the assignment stops claiming the right-hand side.
 
 require sitting_duck
 
@@ -108,8 +110,9 @@ WHERE type = 'assignment' AND start_line = 3;
 # =============================================================================
 
 # The `attribute` node for the target already carries the correct dotted name.
-# The fix must not remove it: #288 will later make such nodes discoverable, and
-# it needs the name to still be there.
+# The fix must not remove it: any later rule that makes an attribute target a
+# definition needs the name to still be there. (#288 is not that rule -- it
+# changed what ast_definitions() reads, not which nodes carry the role.)
 query T
 SELECT name FROM read_ast('test/data/python/sample_app.py')
 WHERE type = 'attribute' AND start_line = 13 ORDER BY node_id LIMIT 1;

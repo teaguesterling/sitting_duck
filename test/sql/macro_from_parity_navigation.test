@@ -105,7 +105,7 @@ CREATE TABLE t AS SELECT * FROM read_ast('test/data/python/sample_app.py');
 query I
 SELECT count(*) FROM ast_definitions('test/data/python/sample_app.py');
 ----
-42
+83
 
 query I
 SELECT count(*) FROM (
@@ -124,11 +124,18 @@ SELECT count(*) FROM (
 ----
 0
 
+# RE-BASELINED for #288/#276, deliberately. The macro's rows changed on
+# purpose: 42 -> 83, the 41 added rows being the names the bare-name hook binds
+# (37 bare parameters and loop targets, 4 `except/with ... as` targets; listed
+# and checked when the change landed). The two EXCEPT ALL blocks above are what
+# show the path form and the `_from` form still agree row for row. The digest
+# keeps its job from here on: a later refactor that moves a column moves it.
+# Before: 42  943333a1fc3d372c093849ee3679427e
 query II
 SELECT count(*), md5(string_agg(r::VARCHAR, ',' ORDER BY r.file_path || ':' || r.node_id))
 FROM ast_definitions_from('t') r;
 ----
-42	943333a1fc3d372c093849ee3679427e
+83	f8f043b5a6d85631418356f66a8db584
 
 # =============================================================================
 # 2. ast_containing_line
@@ -321,17 +328,21 @@ SELECT count(*) FROM (
 # pre-change measurement, so the wrapper must not change a single column on the
 # way out.
 
+# RE-BASELINED for #288/#276 (both pins, same digest): 25 -> 37. The 12 added
+# rows are bare names the hook binds -- qualified_names.py: four `self`,
+# `name`, `owner`; qualified_name_collisions.py: `items`, the comprehension
+# target `i`, three `self`, `value`. Before: 25  2b14596f2acb64be40cf4f4b095130f4
 query II
 SELECT count(*), md5(string_agg(r::VARCHAR, ',' ORDER BY r.file_path || ':' || r.node_id))
 FROM ast_definitions_from('tq') r;
 ----
-25	2b14596f2acb64be40cf4f4b095130f4
+37	a50a93855724f64ba17cbe4841b17b50
 
 query II
 SELECT count(*), md5(string_agg(r::VARCHAR, ',' ORDER BY r.file_path || ':' || r.node_id))
 FROM ast_definitions('test/data/python/q*.py') r;
 ----
-25	2b14596f2acb64be40cf4f4b095130f4
+37	a50a93855724f64ba17cbe4841b17b50
 
 query II
 SELECT count(*), md5(string_agg(r::VARCHAR, ',' ORDER BY r.file_path || ':' || r.node_id))
@@ -371,10 +382,11 @@ FROM ast_in_range('test/data/python/q*.py', 1, 20) r;
 # emitted sequence against the sorted one rather than pinning an emission order.
 #
 # THE TWO CHECKS USE DIFFERENT FIXTURES, AND THE SECOND ONE HAS TO.
-# ast_definitions is ordered by (file_path, start_line) -- which is also the
+# ast_definitions is ordered by (file_path, start_line[, node_id since #288]) -- which is also the
 # order read_ast emits rows in: files in sorted order, and DFS pre-order makes
 # start_line non-decreasing within a file. MEASURED on a body with NO ORDER BY
-# at all: over test/data/python/q*.py (2 files, 25 rows) this check returns
+# at all (row counts as of the #057 split, before #288/#276): over
+# test/data/python/q*.py (2 files, 25 rows) this check returns
 # TRUE, so on that fixture it cannot fail and is a snapshot, not a test; over
 # test/data/python/*.py (19 files, 170 rows) it returns FALSE. So the second
 # check runs over the 19-file glob, where the result is NOT already sorted by
@@ -445,6 +457,13 @@ true	true
 #   - no output row may have a non-NULL parent_id;
 #   - and for ast_definitions, which does not project parent_id at all, the
 #     whole-row digest must equal the clean table's 2b14596f... from section 5.
+#
+# CHANGED for #288/#276: ast_definitions LEFT this section. Its body now reads
+# parent_id -- to exclude roots and to collapse a same-name parent and child --
+# so the column is load-bearing and section 8's rule applies instead: a NULL in
+# a column the body reads empties the answer. Passing the rows through
+# uncollapsed would be a silent wrong answer, which is what this section exists
+# to forbid. The two line macros stay here, unchanged.
 
 statement ok
 CREATE TABLE tq_nullpar AS SELECT * REPLACE (NULL AS parent_id) FROM read_ast('test/data/python/q*.py');
@@ -454,11 +473,10 @@ SELECT count(*), count(*) FILTER (WHERE parent_id IS NOT NULL) FROM tq_nullpar;
 ----
 286	0
 
-query II
-SELECT count(*), md5(string_agg(r::VARCHAR, ',' ORDER BY r.file_path || ':' || r.node_id))
-FROM ast_definitions_from('tq_nullpar') r;
+query I
+SELECT count(*) FROM ast_definitions_from('tq_nullpar');
 ----
-25	2b14596f2acb64be40cf4f4b095130f4
+0
 
 query I
 SELECT count(*) FROM (
@@ -520,8 +538,9 @@ FROM ast_in_range_from('tq_nullpar', 1, 20) r;
 # 8. A NULL in a column the body DOES read
 # =============================================================================
 #
-# Section 7's parent_id is not load-bearing for any of these three. This is the
-# case that is: `start_line` is read by both line macros, and `semantic_type` by
+# Section 7's parent_id is not load-bearing for the two line macros (it is for
+# ast_definitions since #288/#276; section 7 pins that zero). This is the case
+# that is: `start_line` is read by both line macros, and `semantic_type` by
 # ast_definitions. MEASURED: each comparison against NULL is NULL, the WHERE
 # drops every row, and the answer is empty rather than an error.
 #
@@ -536,7 +555,7 @@ FROM ast_in_range_from('tq_nullpar', 1, 20) r;
 # THE POSITIVE CONTROL FOR THESE THREE ZEROS IS SECTION 5, NAMED HERE because
 # it sits ~250 lines above. Section 5 makes the SAME three calls with the SAME
 # arguments over the SAME q*.py fixture, without the NULL, and pins 7, 148 and
-# 25 rows. So a zero below is a finding about the NULL and not a broken query.
+# 37 rows (25 before #288/#276). So a zero below is a finding about the NULL and not a broken query.
 # The 286 counts on this line alone would not establish that: they prove the
 # INPUT is non-empty, not that the query returns rows on clean input.
 
