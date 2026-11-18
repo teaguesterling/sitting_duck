@@ -74,9 +74,9 @@ SELECT '${CMD}', name FROM parse_ast('${CMD} arg', 'bash')
   WHERE type = 'command' AND name LIKE '$%'
 ORDER BY src;
 ----
-${CMD}	${CMD}
 $DEBUG	$DEBUG
 $verbose	$verbose
+${CMD}	${CMD}
 
 # The other command on each of those lines is unaffected and still names
 # normally. This is why section 2 filters on `$`: a line holds two commands.
@@ -129,13 +129,29 @@ inner	which
 # =============================================================================
 # test/data/bash/simple.sh is in the conformance corpus, and its three
 # `$system_ok` / `$verbose` / `$DEBUG` commands are what made the kit's
-# CALL-NAMED check fail for bash. The count going to zero here is the same fact
-# the kit reports.
+# CALL-NAMED check fail for bash.
+#
+# BOTH DENOMINATORS ARE ASSERTED, because they differ and confusing them is easy.
+# The kit reports "3 of 95", counting commands across ALL THREE bash fixtures in
+# the corpus. simple.sh alone holds 90. A single number here would not say which
+# set it came from, and the first draft of this file asserted 95 against
+# simple.sh alone and failed.
 
 query II
 SELECT count(*) FILTER (WHERE name = '' OR name IS NULL) AS unnamed,
        count(*)                                          AS total
 FROM read_ast('test/data/bash/simple.sh')
+WHERE type = 'command';
+----
+0	90
+
+# The kit's own denominator: all three bash corpus fixtures.
+query II
+SELECT count(*) FILTER (WHERE name = '' OR name IS NULL) AS unnamed,
+       count(*)                                          AS total
+FROM read_ast(['test/data/unparse_leaf_text/sample.sh',
+               'test/data/call_extraction/calls.sh',
+               'test/data/bash/simple.sh'])
 WHERE type = 'command';
 ----
 0	95
