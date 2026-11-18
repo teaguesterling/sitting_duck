@@ -305,6 +305,16 @@ on its own, and `clang-format --style=file` changes nothing in it.
   - `tracker/bugs/064` — the two adapters return different `modifiers` and
     `signature_type` for byte-identical source, on four non-JSX node types.
     Found by this feature's own whole-row comparison. Predates it.
-  - `tracker/bugs/065` — `tsx` is the only built-in language with no generated
-    reference page, because the generator reads `.def` tables and tsx owns none.
-    `audit_unreachable_declarations.py` is blind the same way.
+    **Filed 2026-11-17 as #346**, with a sharper cause than this feature
+    recorded: there is only ONE declaration, and the two implementations of its
+    one declared strategy return different kinds of fact — the declaration
+    keyword in javascript, the declared type in typescript.
+  - `tracker/bugs/065` — `audit_unreachable_declarations.py` reports `tsx 0 0`,
+    because the declaration-table resolver knows two conventions and there are
+    three; tsx inherits typescript's table at run time.
+    **Filed 2026-11-17 as #347.** This bug's original headline — that tsx is the
+    only built-in language with no generated reference page — was measured false:
+    three registered languages have no page (`duckdb`, `sql`, `tsx`), four pages
+    document languages no build registers, and
+    `docs/reference/languages/index.md` has carried a warning naming all seven
+    since 2026-11-13. See `tracker/bugs/065` §5.
