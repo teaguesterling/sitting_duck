@@ -4,12 +4,12 @@
 SELECT COUNT(*) AS node_count, 
        AVG(children_count) AS avg_children,
        MAX(depth) AS max_depth
-FROM read_ast('src/unified_ast_backend.cpp', 'cpp');
+FROM read_ast('core/unified_ast_backend.cpp', 'cpp');
 
 -- Test parsing multiple files
 SELECT COUNT(*) AS total_nodes,
        COUNT(DISTINCT file_path) AS file_count
-FROM read_ast('src/language_adapters/*.cpp', 'cpp');
+FROM read_ast('languages/*/*_adapter.cpp', 'cpp');
 
 -- Test different language parsers
 SELECT language, COUNT(*) AS node_count
@@ -18,5 +18,5 @@ FROM (
     UNION ALL
     SELECT 'javascript', COUNT(*) FROM read_ast('test/data/test_ts_types.ts', 'typescript')
     UNION ALL
-    SELECT 'cpp', COUNT(*) FROM read_ast('src/unified_ast_backend.cpp', 'cpp')
+    SELECT 'cpp', COUNT(*) FROM read_ast('core/unified_ast_backend.cpp', 'cpp')
 ) GROUP BY language;

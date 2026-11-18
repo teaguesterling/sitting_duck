@@ -22,7 +22,7 @@ namespace duckdb {
 	                      NativeExtractionStrategy::native_strat, flags)},
 
 const unordered_map<string, NodeConfig> SQLAdapter::node_configs = {
-// clang-format off
+    // clang-format off
 // SQL-specific node types - DDL statements
 DEF_TYPE("create_table", DEFINITION_CLASS, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, 0)
 DEF_TYPE("create_view", DEFINITION_CLASS, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, 0)
@@ -588,7 +588,7 @@ DEF_TYPE("keyword_wait", PARSER_CONSTRUCT, NODE_TEXT, NONE, ASTNodeFlags::IS_KEY
 DEF_TYPE("keyword_write", PARSER_CONSTRUCT, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("keyword_xml", PARSER_CONSTRUCT, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("keyword_zerofill", PARSER_CONSTRUCT, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-// clang-format on
+    // clang-format on
 };
 
 #undef DEF_TYPE

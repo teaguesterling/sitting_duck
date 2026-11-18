@@ -8,7 +8,7 @@ Does two jobs the static derivation cannot do alone.
 
        COALESCE(NULLIF(name, ''), type) <> peek      over children_count = 0
 
-   That expression is lifted verbatim from src/sql_macros/ast_unparse.sql, and
+   That expression is lifted verbatim from core/sql_macros/ast_unparse.sql, and
    `peek` is an independent oracle precisely because the unparser deliberately
    never reads it ("reconstructs source from AST rows WITHOUT `peek`").
    `peek_mode := 'full'` is required -- the default truncates around 80 chars,

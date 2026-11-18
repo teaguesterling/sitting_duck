@@ -13,8 +13,8 @@ int main() {
     
     // Create a simple list of two files
     vector<Value> file_list;
-    file_list.push_back(Value("src/unified_ast_backend.cpp"));
-    file_list.push_back(Value("src/ast_type.cpp"));
+    file_list.push_back(Value("core/unified_ast_backend.cpp"));
+    file_list.push_back(Value("core/ast_type.cpp"));
     
     Value file_list_value = Value::LIST(LogicalType::VARCHAR, file_list);
     

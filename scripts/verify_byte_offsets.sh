@@ -38,7 +38,7 @@
 #         end_byte   == line_start(end_line)   + end_column   - 1
 #
 #     That reconstruction is exactly the fragile thing byte offsets exist to
-#     replace (it is what src/sql_macros/ast_patch.sql still does by hand).
+#     replace (it is what core/sql_macros/ast_patch.sql still does by hand).
 #     Here it is used as an INDEPENDENT ORACLE: it derives positions from the
 #     file's bytes and from the line/column columns, so it agrees with
 #     start_byte only if both are right. It is what catches the class of bug

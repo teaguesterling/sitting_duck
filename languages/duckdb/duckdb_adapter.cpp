@@ -1164,7 +1164,9 @@ void DuckDBAdapter::FinalizeTreeStructure(vector<ASTNode> &nodes) const {
 	// mean for the ordering predicates (ast_precedes / :first-child / nth-child)
 	// to say anything true. Push order already matches, so this is a safety net
 	// against a future handler that appends out of order rather than a reorder.
-	auto by_node_id = [&nodes](size_t a, size_t b) { return nodes[a].node_id < nodes[b].node_id; };
+	auto by_node_id = [&nodes](size_t a, size_t b) {
+		return nodes[a].node_id < nodes[b].node_id;
+	};
 	for (auto &child_list : children) {
 		std::sort(child_list.begin(), child_list.end(), by_node_id);
 	}
