@@ -15,16 +15,32 @@
 # (`obj[k]()`) both return "" for a dynamic callee -- so an empty name was the
 # house answer across three languages.
 #
-# TEAGUE RULED OTHERWISE on 2026-11-18, having been shown that reasoning and the
-# measured python/javascript behaviour: name it as written. `$verbose` tells a
-# reader more than "" does, and "the name as written" is the convention for
-# kotlin's parent types and for jsx's `svg:circle`. The divergence from python
-# and javascript is deliberate and bash-only.
+# THE CITATION WAS THE MISTAKE, not the convention. The house rule is that a
+# callee with NO NAME IN THE SOURCE gets an empty name. `$cmd` has one. Teague
+# made the distinction on 2026-11-18, and `$cmd` differs from `fns[k]()` in four
+# ways:
 #
-# SO THIS FILE PINS THE BOUNDARY, which is the part a later change will get
-# wrong. A VARIABLE is named. A nested command is not, because it is not a
-# variable and its inner command is already named on its own row. A string is
-# not, because its contents are not knowable.
+#   1. `$cmd` names ONE variable, written right there. `fns[k]` is a compound
+#      expression -- two variables and a subscript -- and no identifier in it
+#      names the callee. There is nothing to write down.
+#   2. Bash has no first-class functions and no function references, so
+#      expansion in command position is THE way to parameterize a command. In
+#      python `fns[k]()` is one dispatch idiom among many.
+#   3. The written form IS the interface. `$CC`, `$MAKE` and `$PYTHON` in a
+#      build script are the meaningful unit, and more useful to a reader than
+#      whatever they resolved to on one machine.
+#   4. `$cmd` often resolves -- an assignment is frequently visible in the same
+#      file. `fns[k]` essentially never does.
+#
+# So naming `$verbose` is that rule applied correctly, not an exception to it.
+# "The name as written" is also the convention for kotlin's parent types and
+# jsx's `svg:circle`.
+#
+# SO THIS FILE PINS THE BOUNDARY, which follows from the rule rather than being
+# chosen. A VARIABLE has a name in the source, so it is named. A command
+# SUBSTITUTION has no single callee at all (#91), so there is no name to take. A
+# STRING may hold a compound like `"$prefix/bin/$tool"`, so no single identifier
+# names the callee even when one happens to look like it does.
 #
 # HOW TO READ A FAILURE HERE
 #
