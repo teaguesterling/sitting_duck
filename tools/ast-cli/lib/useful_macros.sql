@@ -202,19 +202,19 @@ CREATE OR REPLACE MACRO find_todos(file_pattern) AS TABLE
 -- ========================================
 
 -- Get function summary for all C++ files:
--- FROM summarize_functions_from_files('src/*.cpp');
+-- FROM summarize_functions_from_files('core/*.cpp');
 
 -- Find complex functions needing refactoring:
--- FROM find_complex_functions('src/**/*.cpp', 30, 50);
+-- FROM find_complex_functions('core/**/*.cpp', 30, 50);
 
 -- Analyze class structure:
--- FROM analyze_classes('src/*.cpp');
+-- FROM analyze_classes('core/*.cpp');
 
 -- Get import dependencies:
--- FROM get_imports('src/**/*.cpp');
+-- FROM get_imports('core/**/*.cpp');
 
 -- Get code quality metrics:
--- FROM analyze_file_metrics('src/unified_ast_backend.cpp');
+-- FROM analyze_file_metrics('core/unified_ast_backend.cpp');
 
 -- Find all TODOs:
--- FROM find_todos('src/**/*.*');
+-- FROM find_todos('core/**/*.*');

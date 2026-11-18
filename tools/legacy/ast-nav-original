@@ -186,10 +186,10 @@ case "${1:-help}" in
         ;;
         
     "summary")
-        # File summary: ast-nav summary "src/unified_ast_backend.cpp"
+        # File summary: ast-nav summary "core/unified_ast_backend.cpp"
         if [[ -z "$2" ]]; then
             echo "Usage: ast-nav summary <file_path>"
-            echo "Example: ast-nav summary 'src/unified_ast_backend.cpp'"
+            echo "Example: ast-nav summary 'core/unified_ast_backend.cpp'"
             exit 1
         fi
         query="SELECT * FROM ast_file_summary('$2');"

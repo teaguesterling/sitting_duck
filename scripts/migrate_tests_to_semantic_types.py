@@ -220,7 +220,20 @@ CREATE OR REPLACE MACRO semantic_kind(semantic_type) AS
 def main():
     project_root = Path(__file__).parent.parent
     test_dir = project_root / 'test'
-    src_dir = project_root / 'src'
+    # 054 M2 stage 4 moved the engine from src/ to core/. This script REWRITES
+    # files in place, and Path.rglob() on a missing directory yields nothing
+    # without raising -- so a stale path here does not fail, it silently skips
+    # half the job and still rewrites all 203 test files. Both directories are
+    # asserted before anything is written.
+    src_dir = project_root / 'core'
+
+    for label, d in (('test', test_dir), ('core', src_dir)):
+        if not d.is_dir():
+            raise SystemExit(
+                f"{__file__}: {label} directory {d} does not exist. Refusing to "
+                f"run, because this script rewrites files in place and would "
+                f"otherwise migrate only part of the tree."
+            )
     
     updated_files = []
     

@@ -13,7 +13,7 @@
 # MEASURED result, that byte-identity held for none of the corpus
 # languages: the rules-based `ast_unparse*` macros reconstruct source from node
 # types and names and never read a position column, so inter-token whitespace
-# is normalised. `ast_unparse_exact*` (src/sql_macros/ast_unparse.sql) closes
+# is normalised. `ast_unparse_exact*` (core/sql_macros/ast_unparse.sql) closes
 # that gap by splicing the original bytes at [start_byte, end_byte) instead.
 #
 # The committed sqllogictest, test/sql/ast_unparse_exact.test, pins the

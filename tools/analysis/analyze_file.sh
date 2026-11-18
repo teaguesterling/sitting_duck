@@ -7,8 +7,8 @@ DB_PATH="${2:-test2.db}"
 
 if [ -z "$FILE_PATH" ]; then
     echo "Usage: $0 <file_path> [database_path]"
-    echo "Example: $0 src/semantic_type_functions.cpp"
-    echo "Example: $0 src/unified_ast_backend.cpp test2.db"
+    echo "Example: $0 core/semantic_type_functions.cpp"
+    echo "Example: $0 core/unified_ast_backend.cpp test2.db"
     exit 1
 fi
 

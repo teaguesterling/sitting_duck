@@ -7,9 +7,9 @@ Usage:
   python scripts/analyze_file_functions.py <file_path> [--db <db_path>] [--output <format>]
   
 Examples:
-  python scripts/analyze_file_functions.py src/semantic_type_functions.cpp
-  python scripts/analyze_file_functions.py src/unified_ast_backend.cpp --output json
-  python scripts/analyze_file_functions.py "src/*.cpp" --db my_ast.db
+  python scripts/analyze_file_functions.py core/semantic_type_functions.cpp
+  python scripts/analyze_file_functions.py core/unified_ast_backend.cpp --output json
+  python scripts/analyze_file_functions.py "core/*.cpp" --db my_ast.db
 """
 
 import argparse

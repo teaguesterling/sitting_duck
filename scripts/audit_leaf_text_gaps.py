@@ -14,7 +14,7 @@ literals" reproduces exactly the #184 failure mode.
 
 The bug being audited
 ---------------------
-``src/sql_macros/ast_unparse.sql`` emits one token per leaf node as::
+``core/sql_macros/ast_unparse.sql`` emits one token per leaf node as::
 
     COALESCE(NULLIF(l.name, ''), l.type) AS tok   -- over WHERE children_count = 0
 
@@ -129,7 +129,7 @@ def iter_definition_tables():
 # Name-extraction strategies that can yield text for a node with no children.
 # Every FIND_*/FIRST_CHILD strategy searches children, so on a leaf it returns
 # "" and the unparser falls back to emitting the node type. See
-# LanguageAdapter::ExtractByStrategy in src/language_adapter.cpp.
+# LanguageAdapter::ExtractByStrategy in core/language_adapter.cpp.
 TEXT_BEARING_STRATEGIES = {"NODE_TEXT"}
 # CUSTOM may or may not produce text for a given leaf; it is a per-language
 # C++ handler. Reported as "review" rather than as a gap or as covered.
@@ -402,7 +402,7 @@ def iter_macro_arglists(text: str, token: str = DEF_TYPE_TOKEN, with_offsets: bo
 # Leading `"raw_type"` of a DEF_TYPE argument list.
 #
 # ONE OR MORE adjacent string literals, because C concatenates them and
-# clang-format splits long ones. src/language_adapters/sql_adapter.cpp really
+# clang-format splits long ones. languages/sql/sql_adapter.cpp really
 # contains
 #
 #     DEF_TYPE("keyword_"
@@ -484,8 +484,8 @@ def preprocess_def(path: Path, seen: set[Path] | None = None) -> str:
 def parse_def_strategies(path: Path) -> tuple[dict[str, str], list[Path]]:
     """Map raw node type -> name-extraction strategy from a DEF_TYPE table.
 
-    Works for ``src/language_configs/*_types.def`` (following .def #includes)
-    and the inline tables in ``src/language_adapters/{sql,duckdb}_adapter.cpp``.
+    Works for ``languages/*/*_types.def`` (following .def #includes)
+    and the inline tables in ``languages/{sql,duckdb}/*_adapter.cpp``.
 
     Duplicate raw types resolve first-wins, matching the unordered_map
     initialiser list the entries feed. ruby_types.def really does declare

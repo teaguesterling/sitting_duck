@@ -176,7 +176,7 @@ readonly DEFAULT_DEF_SOURCES=(
 # The native-extraction strategies that amount to "this node type declares a
 # function-shaped signature", i.e. the ones whose whole job is to populate
 # parameters / signature_type / modifiers. From NativeExtractionStrategy in
-# src/include/node_config.hpp.
+# core/include/node_config.hpp.
 readonly FUNCTION_NATIVE_STRATEGIES='FUNCTION_WITH_PARAMS|FUNCTION_WITH_DECORATORS|ARROW_FUNCTION|ASYNC_FUNCTION|GENERIC_FUNCTION|METHOD_DEFINITION|CONSTRUCTOR_DEFINITION'
 
 usage() {

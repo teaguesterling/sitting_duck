@@ -19,7 +19,7 @@ Two kinds of edit, both deliberately minimal:
 
 Why PARSER_CONSTRUCT and not a "better" semantic type
 -----------------------------------------------------
-``PopulateSemanticFieldsTemplated`` in src/include/unified_ast_backend_impl.hpp
+``PopulateSemanticFieldsTemplated`` in core/include/unified_ast_backend_impl.hpp
 already falls back to ``PARSER_CONSTRUCT`` with flags 0 for any node type
 with no config. Writing that same value explicitly means the new entry changes
 *only* name extraction -- the node keeps the exact semantic type and flags it
@@ -163,7 +163,7 @@ APPEND_HEADER = """
 // =============================================================================
 // Named, text-bearing leaf types that this grammar exposes but that no
 // DEF_TYPE entry configured. The unparser emits one token per leaf as
-// COALESCE(NULLIF(name, ''), type) (src/sql_macros/ast_unparse.sql), so a
+// COALESCE(NULLIF(name, ''), type) (core/sql_macros/ast_unparse.sql), so a
 // named leaf with no text-producing name strategy round-trips to its own type
 // name instead of its text. On a leaf every FIND_*/FIRST_CHILD strategy
 // returns "" -- there are no children to search -- so NODE_TEXT is the only
@@ -307,7 +307,7 @@ def splice_into_initializer(text: str, block: str, path: Path) -> str:
     """Insert `block` just before the brace closing the node_configs list.
 
     If the table is fenced with `// clang-format off` / `// clang-format on`,
-    insert INSIDE the fence. src/language_adapters/sql_adapter.cpp is fenced
+    insert INSIDE the fence. languages/sql/sql_adapter.cpp is fenced
     precisely so clang-format cannot cascade its entries back into a staircase;
     appending after `// clang-format on` would leave every new entry outside the
     protection and the next `make format` would shred them -- which is how seven

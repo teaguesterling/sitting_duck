@@ -81,7 +81,7 @@ from audit_leaf_text_gaps import (  # noqa: E402
 ANON_TOKEN = "DEF_TYPE_ANON("
 
 # Bit 0 of the flags byte. IS_KEYWORD and IS_KEYWORD_IF_LEAF are aliases for
-# IS_SYNTAX_ONLY (src/include/node_config.hpp), so all three spellings mean the
+# IS_SYNTAX_ONLY (core/include/node_config.hpp), so all three spellings mean the
 # anonymous token is already classified as syntax.
 SYNTAX_FLAGS = ("IS_SYNTAX_ONLY", "IS_KEYWORD")
 # Flags the #208 engine rule strips from an unnamed node, and in doing so sets
@@ -229,7 +229,7 @@ def main() -> int:
             "\nEach gap means an anonymous grammar token is emitted as a construct of\n"
             "its named twin's kind. Add the DEF_TYPE_ANON line (--emit prints it) to\n"
             "the language's .def file, and give the adapter the second include pass\n"
-            "(see src/language_adapters/ruby_adapter.cpp).",
+            "(see languages/ruby/ruby_adapter.cpp).",
             file=sys.stderr,
         )
     return 1 if total_gaps else 0

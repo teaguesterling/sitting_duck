@@ -7,7 +7,7 @@ WITH all_nodes AS (
     SELECT 
         *,
         ROW_NUMBER() OVER (PARTITION BY file_path ORDER BY node_id) - 1 as corrected_node_id
-    FROM read_ast(['src/unified_ast_backend.cpp', 'src/ast_type.cpp'])
+    FROM read_ast(['core/unified_ast_backend.cpp', 'core/ast_type.cpp'])
 )
 SELECT 
     file_path,
