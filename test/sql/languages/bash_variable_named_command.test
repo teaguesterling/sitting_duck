@@ -50,6 +50,14 @@
 # `concatenation` node rather than a string, and takes the same answer -- which
 # is the form Teague wrote.
 #
+# ROW 5 IS A DECIDED BOUNDARY, NOT AN OVERSIGHT. An ANSI-C string keeps its
+# `$'...'` spelling, because the text starts with `$` and only a MATCHED outer
+# pair is stripped. `ansi` is arguable; nothing in the corpus exercises the
+# shape, so no fixture measures it either way. Raised as an open question with
+# the ruling and accepted as it stands (Teague, 2026-11-18), so it is pinned
+# here -- an undecided edge is how this file's guard control got voided twice in
+# one day.
+#
 # THE ONE EXCEPTION IS A COMMAND SUBSTITUTION, which has no single callee at all
 # (#91). `$(which ls) -l` runs whatever `which ls` printed, and the inner
 # command already carries `which` on its own row. A substitution inside a string
@@ -119,12 +127,15 @@ SELECT '3 $prefix/bin/$tool', name FROM parse_ast('$prefix/bin/$tool arg', 'bash
 UNION ALL
 SELECT '4 "$prefix/bin/$tool"', name FROM parse_ast('"$prefix/bin/$tool" arg', 'bash')
   WHERE type = 'command'
+UNION ALL
+SELECT '5 $''ansi''', name FROM parse_ast('$''ansi'' arg', 'bash') WHERE type = 'command'
 ORDER BY src;
 ----
 1 "$cmd"	$cmd
 2 'ls'	ls
 3 $prefix/bin/$tool	$prefix/bin/$tool
 4 "$prefix/bin/$tool"	$prefix/bin/$tool
+5 $'ansi'	$'ansi'
 
 # The other command on each of those lines is unaffected and still names
 # normally. This is why section 2 filters on `$`: a line holds two commands.
