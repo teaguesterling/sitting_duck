@@ -56,11 +56,11 @@ CREATE OR REPLACE MACRO ast_call_arguments(ast_table, call_node_id) AS TABLE
 --   CREATE TABLE my_ast AS SELECT * FROM read_ast('src/**/*.py');
 --   SELECT * FROM ast_definitions_from('my_ast')
 --
--- Reads name, flags, semantic_type, node_id, parent_id and file_path. A table
--- whose flags is NULL returns no rows rather than raising: every role test and
--- is_construct() against NULL is NULL, so no row is a binding. (Since #288 a
--- NULL semantic_type alone no longer empties it: a row with a definition role
--- still counts, as a variable.) That is the NULL-definite convention issue #81
+-- Reads name, flags, semantic_type, node_id, parent_id and file_path. A NULL
+-- in flags, semantic_type or parent_id returns no rows rather than raising.
+-- parent_id is load-bearing since #288/#276: it excludes roots and drives the
+-- collapse, so a table without it cannot be answered and is not guessed at.
+-- That is the NULL-definite convention issue #81
 -- set for the selector attribute filters (see the NULL semantics note in
 -- css_selectors.sql), and these macros follow it instead of validating columns.
 --
@@ -111,6 +111,10 @@ CREATE OR REPLACE MACRO ast_definitions_from(ast_table) AS TABLE
             FROM ast a
             WHERE a.name IS NOT NULL AND a.name != ''
               AND a.parent_id IS NOT NULL
+              -- NULL-definite (#81): the kind is read from semantic_type, so a
+              -- NULL there must empty the answer, not default every row to
+              -- 'variable'. Without this the role test (TRUE OR NULL) passes.
+              AND a.semantic_type IS NOT NULL
               AND (is_name_definition(a.flags)
                    OR is_name_declaration(a.flags)
                    OR (NOT is_name_reference(a.flags)
