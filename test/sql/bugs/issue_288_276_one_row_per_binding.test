@@ -1,0 +1,170 @@
+# name: test/sql/bugs/issue_288_276_one_row_per_binding.test
+# description: #288 + #276 — ast_definitions() returns every bound name, once
+# group: [bugs]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# ---------------------------------------------------------------------------
+# The rule ("rule B", tracker/roadmap/v1.18.3-name-binding.md):
+#
+#   BINDING   a named, non-root node whose name role is DEFINITION or
+#             DECLARATION; or a node with NO name role whose semantic type is
+#             a definition kind and which is a construct (the SQL adapter sets
+#             no role, so this is what keeps CREATE TABLE / VIEW / FUNCTION).
+#   COLLAPSE  a binding whose DIRECT parent is a binding with the same name is
+#             dropped; the outermost row survives, with its own lines.
+#   KIND      the strongest kind in the collapsed chain:
+#             function > class > type > module > variable.
+#
+# #288 is the first half: the macro filtered on semantic type only, so a name
+# the bare-name hook binds (role DEFINITION, semantic type NAME_IDENTIFIER)
+# never appeared. #276 is the second: a container and its declarator both
+# carry a definition semantic type, so one name came back two or three times.
+# ---------------------------------------------------------------------------
+
+# --- #288: hook-bound names appear ------------------------------------------
+# The brief's own example. Before: `f | function` and `y | variable` only.
+statement ok
+CREATE TABLE py AS SELECT * FROM parse_ast('def f(x, y=1):
+    return x
+for zz in items:
+    pass', 'python');
+
+query TT
+SELECT name, definition_type FROM ast_definitions_from('py') ORDER BY start_line, name;
+----
+f	function
+x	variable
+y	variable
+zz	variable
+
+# A READ is still not a binding. `x` is returned on line 2 and `items` is the
+# iterable: neither may appear, so each name above appears exactly once.
+query I
+SELECT count(*) FROM ast_definitions_from('py') WHERE name IN ('items') OR (name = 'x' AND start_line = 2);
+----
+0
+
+# --- #276: one row per name -------------------------------------------------
+# JS `const f = () => {}`: three rows before (lexical_declaration,
+# variable_declarator, arrow_function, all named f). One now, and it is a
+# FUNCTION -- the strongest kind in the chain, which is how a reader calls it.
+statement ok
+CREATE TABLE js1 AS SELECT * FROM parse_ast('const f = () => {};', 'javascript');
+
+query TTT
+SELECT name, definition_type, type FROM ast_definitions_from('js1');
+----
+f	function	lexical_declaration
+
+# `let a = 1, b = 2`: the container is named after its FIRST declarator only.
+# Deduplicating by name would be wrong in the other direction and lose `b`.
+statement ok
+CREATE TABLE js2 AS SELECT * FROM parse_ast('let a = 1, b = 2;', 'javascript');
+
+query TT
+SELECT name, definition_type FROM ast_definitions_from('js2') ORDER BY name;
+----
+a	variable
+b	variable
+
+statement ok
+CREATE TABLE ts1 AS SELECT * FROM parse_ast('const x: number = 1;', 'typescript');
+
+query TT
+SELECT name, definition_type FROM ast_definitions_from('ts1');
+----
+x	variable
+
+statement ok
+CREATE TABLE java1 AS SELECT * FROM parse_ast('class C { private int size; }', 'java');
+
+query TT
+SELECT name, definition_type FROM ast_definitions_from('java1') ORDER BY start_line, name;
+----
+C	class
+size	variable
+
+# --- collapse is DIRECT parent only, and that is deliberate -----------------
+# A constructor is named after its class, but it is a separate definition,
+# and a class_body sits between the two. 24 such pairs in test/data/** (java,
+# c#, c++, dart). A collapse that looked through the middle node would delete
+# every constructor.
+statement ok
+CREATE TABLE java2 AS SELECT * FROM parse_ast('class Test { Test() {} }', 'java');
+
+query TT
+SELECT type, definition_type FROM ast_definitions_from('java2') ORDER BY start_line, type;
+----
+class_declaration	class
+constructor_declaration	function
+
+# --- SQL keeps its definitions ----------------------------------------------
+# The SQL adapter sets no name role. A flag-only rule would lose all of these.
+statement ok
+CREATE TABLE sq AS SELECT * FROM parse_ast('CREATE TABLE users (id INTEGER, name TEXT);', 'sql');
+
+query TT
+SELECT name, definition_type FROM ast_definitions_from('sq') ORDER BY name;
+----
+id	variable
+name	variable
+users	class
+
+# --- no parameter TYPE is a binding (#64 follow-up, already fixed) -----------
+statement ok
+CREATE TABLE go1 AS SELECT * FROM parse_ast('package m
+func f(p Point) {}', 'go');
+
+query TT
+SELECT name, definition_type FROM ast_definitions_from('go1') ORDER BY start_line, name;
+----
+m	module
+f	function
+p	variable
+
+# --- the path form agrees with the table form -------------------------------
+statement ok
+CREATE TABLE py_app AS SELECT * FROM read_ast('test/data/python/sample_app.py');
+
+query I
+SELECT (SELECT count(*) FROM ast_definitions('test/data/python/sample_app.py'))
+     = (SELECT count(*) FROM ast_definitions_from('py_app'));
+----
+true
+
+# --- the corpus ---------------------------------------------------------------
+# Measured on this branch over test/data/** (418 files, 73,797 nodes):
+# before 3,573 rows; rule B 3,733 = 3,573 - 478 collapsed + 638 added. None of
+# the 3,573 is lost except by collapse into a same-name parent.
+statement ok
+CREATE TABLE corpus AS SELECT * FROM read_ast('test/data/**', ignore_errors := true);
+
+statement ok
+CREATE TABLE corpus_defs AS SELECT * FROM ast_definitions_from('corpus');
+
+query I
+SELECT count(*) FROM corpus_defs;
+----
+3733
+
+# No surviving row has a same-name parent that also survived.
+query I
+SELECT count(*)
+FROM corpus_defs c
+JOIN corpus n ON n.file_path = c.file_path AND n.node_id = c.node_id
+JOIN corpus_defs p ON p.file_path = c.file_path AND p.node_id = n.parent_id AND p.name = c.name;
+----
+0
+
+# Roots are excluded: #186 is about to name every root by its path, and the
+# macro must not grow by one `module` row per file when it does.
+query I
+SELECT count(*)
+FROM corpus_defs c JOIN corpus n ON n.file_path = c.file_path AND n.node_id = c.node_id
+WHERE n.parent_id IS NULL;
+----
+0
