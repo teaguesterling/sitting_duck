@@ -1,6 +1,10 @@
 # 059 — The parameter-extraction cluster: eight issues, four causes
 
-**Status:** phase 1 implemented. Phases 2 to 4 still plan only.
+**Status:** phase 1 implemented. Phases 2 and 4 still plan only.
+**Phase 3 is EMPTY: #316 is already fixed.** Re-measured 2026-11-18. See §8.
+**Read §8 before starting phase 2.** It re-measures every remaining issue on
+main at `41a21f6` (post the `core/` move) and corrects §4's central claim about
+the ledgers.
 **Phase 1 branch:** `fix/319-320-nested-parameter-names` (#319, #320, #323).
 **Phase 1 corrected four claims in this plan.** Section 7 holds them, and the
 corrections are applied in place above, so no section below contradicts it.
@@ -362,3 +366,194 @@ just deleted. The row is now removed, and `verify_native_dispatch.py` reports
 `67 known-dead literal(s) still exactly as spec/abi/module-abi.yaml records
 them, and no new ones`. The lesson is in section 4: that gate is a workflow
 step, so a local `make test` run can never reach it.
+
+---
+
+## 8. Phases 2 to 4, re-measured on main at `41a21f6` (2026-11-18)
+
+Phase 1's lesson was that all three of its issue bodies named a cause that was
+not there. So every remaining issue was re-run before any phase-2 code. Five
+things changed.
+
+Measured against `build/release-s4-B/duckdb`, whose compiled body is
+byte-identical to main's.
+
+### 8a. §4's central claim is FALSE for the baseline file
+
+§4 says of the two ledgers: "both already exist, and both fail loudly when a fix
+lands. That is by design, and it is why this cluster is tractable."
+
+That holds for `test/sql/conformance/parameter_binding_multilang.test`, which
+`make test` runs. It does **not** hold for
+`spec/conformance/native-decl-baseline.tsv`.
+
+**Nothing runs `scripts/conformance_kit.sh`.** Not CI, not the Makefile, not
+another script:
+
+```
+$ grep -nE '^[^#]*conformance_kit' .github/workflows/*.yml
+  (no output)
+$ grep -nE 'conformance_kit' Makefile
+  (no output)
+```
+
+CI's only mention of the kit is a COMMENT, at
+`.github/workflows/MainDistributionPipeline.yml:401`, inside a block about the
+kit's denominator. `scripts/verify_parser_reproducibility.sh` names the baseline
+file once, at line 34, as a rhetorical analogy for its own bidirectional
+contract — it does not read it.
+
+So the baseline's stated contract ("a pair listed here that no longer
+reproduces ALSO fails the run") is enforced only when a human runs the kit by
+hand.
+
+### 8b. The baseline is ALREADY stale, in the direction its contract names
+
+Running only the NATIVE-DECL check for c, cpp and csharp emits **one** row,
+where the file lists four cpp rows:
+
+```
+$ scripts/conformance_kit.sh --binary ./build/release-s4-B/duckdb \
+      --languages c,cpp,csharp --emit-decl-baseline
+# language  node_type      strategy             level  measurement                      reason
+cpp         argument_list  function_with_params TODO   seen=10 src_params=2 delivered=0 TODO
+```
+
+Three baselined pairs no longer reproduce:
+
+| row | level | issue it belongs to |
+|---|---|---|
+| `cpp parameter_list` | L5 | none — 042 step 5 |
+| `cpp function_declarator` | L3 | **#324** |
+| `cpp lambda_expression` | L3 | **#316** |
+
+**The corpus has not shrunk, so this is not coverage loss.** The one row that
+still reproduces carries the same measurement as the file records, byte for
+byte: `seen=10 src_params=2 delivered=0`. A smaller corpus would have moved that
+number too.
+
+So three rows were satisfied by earlier work, nobody deleted them, and nothing
+noticed — because nothing runs the check.
+
+### 8c. Phase 3 is empty: #316 is already fixed
+
+#316 says C++ lambdas report zero parameters. Its cause was never established,
+and its baseline row read `seen=1`, so the claim rested on one lambda. Measured
+across seven forms, every one reports its parameters:
+
+```
+form                  n  parameters
+plain                 2  [{'name': a, 'type': int}, {'name': s, 'type': const char*}]
+capture by ref        1  [{'name': a, 'type': int}]
+generic auto          2  [{'name': a, 'type': auto}, {'name': b, 'type': auto&&}]
+trailing return       1  [{'name': a, 'type': int}]
+mutable, no params    0  []                            <- correct: it has none
+immediately invoked   1  [{'name': a, 'type': int}]
+template params       2  [{'name': a, 'type': T}, {'name': b, 'type': int}]
+```
+
+Generic `auto&&` and an explicit template parameter list are the two forms most
+likely to break a name walk, and both are right. **#316 should be verified and
+closed, not diagnosed.** Phase 3 as planned has no work in it.
+
+### 8d. Phase 2's three issues all reproduce, and two are wider than filed
+
+**#324 reproduces exactly as filed.** The outer `function_declarator` carries
+the returned function type's parameter:
+
+```
+type                 name    parameters                      signature_type
+declaration          <e>     []                              NULL
+function_declarator  <e>     [{'name': '', 'type': char}]    int       <- the return type's
+function_declarator  fp_ret  [{'name': a, 'type': int}]      NULL      <- correct
+```
+
+**#317 is wider than filed.** Its two stated symptoms hold — C drops the
+qualifier and loses a pointer level, and names a nested declarator `param`:
+
+```
+void f(const char* s, int** pp) {}
+
+lang  type                   n  parameters
+c     function_definition    2  [{'name': s, 'type': char*}, {'name': param, 'type': int*}]
+cpp   function_definition    2  [{'name': s, 'type': const char*}, {'name': pp, 'type': int**}]
+```
+
+Two symptoms it does not mention, from the same run:
+
+```
+c     function_declarator    0  []        <- cpp delivers 2 here
+c     parameter_declaration  0  []        name is EMPTY; cpp names them s and pp
+cpp   function_declarator    2  [{'name': s, 'type': const char*}, {'name': pp, 'type': int**}]
+```
+
+A query selecting `function_declarator` — the natural node for a signature —
+gets two parameters in C++ and none in C. That is a harder divergence for a
+cross-language caller than the type text, because the row is empty rather than
+disagreeing.
+
+**#321's `ref` half is wider than filed.** The issue names `ref`. Measured,
+`ref`, `out` and `in` are all dropped, and a plain parameter is indistinguishable
+from all three:
+
+```
+class C { void M(ref int x, out int y, in int z, int w) {} }
+
+method_declaration  M  [{'name': x, 'type': int}, {'name': y, 'type': int},
+                        {'name': z, 'type': int}, {'name': w, 'type': int}]
+```
+
+Note also that C# puts the list on `method_declaration` and leaves
+`parameter_list` empty — the opposite arrangement from C++, where both carry it.
+That is a third convention, not a defect, and it is out of scope.
+
+### 8e. Phase 2's foundation holds, and phase 4's premises hold
+
+```
+core/include/declarator_walk.hpp
+  35: inline TSNode FindDeclaratorIdNode(TSNode declarator)
+  81: inline bool DeclaratorIdIsTheWholeName(const char *node_type)
+```
+
+`NormalizeDeclaredType` and `DeclaredTypeText` are still `CppNativeExtractor`
+statics, at `core/include/cpp_native_extractors.hpp:89` and `:121`, so C cannot
+reach them. Promoting those two is still the whole of S2's foundation, exactly
+as §2 says.
+
+Phase 4, confirmed unchanged:
+
+  - **#322.** `fn probe(a: i32, b: []const u8) void {}` gives
+    `function_declaration` 0 parameters while both `parameter` rows are present
+    and named `a` and `b`. `core/include/zig_native_extractors.hpp` does not
+    exist.
+  - **#255.** `ParameterInfo` at `core/include/ast_type.hpp:92` has **six**
+    fields: `name`, `type`, `default_value`, `is_optional`, `is_variadic`,
+    `annotations`. SQL exposes two:
+    `STRUCT("name" VARCHAR, "type" VARCHAR)[]`.
+
+### 8f. One gap in the test ledger, and the stale paths in this document
+
+`test/sql/conformance/parameter_binding_multilang.test` pins #317/#318 at line
+184 and #321 at line 293. **It does not pin #324.** Phase 2 adds that pin, or
+#324's fix lands with no red-first test in the shared conformance file.
+
+Every `src/` path in sections 1 to 6 above predates M2 stage 4. They read
+`core/` now: `src/include/declarator_walk.hpp` is
+`core/include/declarator_walk.hpp`, and `src/unified_ast_backend.cpp:621` is in
+`core/unified_ast_backend.cpp`. The paths are left as written above so the
+record of what was measured when stays intact.
+
+### 8g. The revised phasing
+
+| phase | issues | state |
+|---|---|---|
+| 1 | #319, #320, #323 | done, merged |
+| **2** | #317, #324, #321's `ref` half | ready; all three reproduce, two wider than filed |
+| **3** | ~~#316~~ | **empty** — already fixed, verify and close |
+| **4** | #322, #255, #321's `params` half | premises confirmed unchanged |
+
+**The open question before phase 2 starts** is what to do about 8a and 8b. The
+baseline is the ledger §4 relies on to make this cluster tractable, and it is
+both unenforced and already wrong. Phase 2 changes `cpp function_declarator`
+behaviour, which is one of the three stale rows. Fixing the ledger first is
+cheap; leaving it means phase 2 inherits a ledger nobody checks.
