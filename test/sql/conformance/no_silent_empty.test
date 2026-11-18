@@ -71,9 +71,15 @@ attribute filters inside :has(...) are not supported
 # would now MATCH, so keeping the old source would have asserted an error that
 # cannot happen.
 #
-# dynamic_calls.sh is the replacement: 4 call nodes, 0 named, measured. Its
-# commands are named by a parameter expansion or a string, so they are resolved
-# at run time and #140a cannot bind them.
+# dynamic_calls.sh is the replacement: 3 command nodes, 0 named, measured.
+#
+# REWRITTEN 2026-11-18. It used to rely on a bare parameter expansion
+# (`$cmd --flag`) staying unnamed. Teague ruled that a bash command named by a
+# VARIABLE is named as written, so `$cmd` and `$runner` became named and this
+# control stopped raising -- which is how this assertion first failed. The file
+# now uses only the two shapes that are still unnamed: a STRING in command
+# position (`"$prog" arg`, `"${alt}" x`) and a command substitution with a
+# string inside (`$("$runner")`), which has no single callee at all (#91).
 #
 # unnamed_calls.sh is STILL the right control for the conformance kit's
 # CALL-NAMED check, which needs SOME unnamed call node, not all of them. The two

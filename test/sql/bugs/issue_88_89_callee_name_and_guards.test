@@ -174,10 +174,16 @@ caller	5
 #
 # A guard with no source that triggers it is not a tested guard, so the shape
 # moved to test/data/conformance/control/dynamic_calls.sh. Every call node in
-# that file is unnamed for a reason #140a does not remove: a command named by a
-# parameter expansion (`$cmd --flag`) or a string (`"$prog" arg`) resolves at
-# run time, and `$(...)` has no single callee at all (#91). Measured, 4 call
-# nodes, 0 named.
+# that file is unnamed.
+#
+# THE SET OF UNNAMED SHAPES NARROWED ON 2026-11-18. That file used to rely on a
+# bare parameter expansion (`$cmd --flag`) staying unnamed. It no longer does:
+# Teague ruled that a bash command named by a VARIABLE is named as written, so
+# `$cmd --flag` reports `$cmd`. The control was rewritten to use only the two
+# shapes that are still unnamed -- a STRING in command position (`"$prog" arg`)
+# and a command substitution with a string inside (`$("$runner")`), which has no
+# single callee at all (#91). Measured after the rewrite: 3 command nodes, 0
+# named.
 statement error
 SELECT * FROM ast_select('test/data/conformance/control/dynamic_calls.sh', '.call#date');
 ----

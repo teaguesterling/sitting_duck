@@ -39,7 +39,6 @@
 # answers each of these `implement` / `retract` / `retract and reclassify`,
 # per the review rubric's §4, rather than by reflex.
 cpp	argument_list	function_with_params	L5	seen=10 src_params=2 delivered=0	declared ORGANIZATION_LIST at cpp_types.def:779; the argument list of a CALL, with name strategy NONE
-cpp	parameter_list	function_with_params	L5	seen=13 src_params=8 delivered=0	declared ORGANIZATION_LIST at cpp_types.def:774; this node IS the parameter list the strategy would look for
 javascript	arguments	function_with_params	L5	seen=20 src_params=14 delivered=0	declared ORGANIZATION_LIST|COLLECTION at javascript_types.def:603; the argument list of a call
 javascript	formal_parameters	function_with_params	L5	seen=16 src_params=10 delivered=0	declared ORGANIZATION_LIST|COLLECTION at javascript_types.def:608; this node IS the parameter list
 python	argument_list	function_with_params	L5	seen=20 src_params=16 delivered=0	declared ORGANIZATION_LIST at python_types.def:392; the argument list of a call
@@ -57,6 +56,4 @@ sql	statement	function_with_params	L5	seen=9 src_params=3 delivered=0	declared E
 # an implementation could satisfy them. Which specialization is missing is NOT
 # yet traced -- the cause here is inferred from the declaration and the empty
 # column, not read out of the extractor, and tracing it is 042 step 5's job.
-cpp	function_declarator	function_with_params	L3	seen=12 src_params=7 delivered=0	declared DEFINITION_FUNCTION at cpp_types.def:78; it owns the parameter_list child, so this is a gap in the extractor rather than a wrong declaration
-cpp	lambda_expression	arrow_function	L3	seen=1 src_params=1 delivered=0	declared DEFINITION_FUNCTION|LAMBDA with ARROW_FUNCTION at cpp_types.def:98. ONE node in the whole corpus, so this row rests on a single observation: a fixture with more lambdas would say more
 dart	method_signature	function_with_params	L3	seen=8 src_params=1 delivered=0	declared DEFINITION_FUNCTION at dart_types.def:157 with a CUSTOM name strategy; 8 nodes, of which the guard finds 1 with a parameter in source

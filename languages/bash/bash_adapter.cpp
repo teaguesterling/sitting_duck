@@ -73,13 +73,57 @@ string BashAdapter::ExtractNodeName(TSNode node, const string &content) const {
 				if (ts_node_is_null(name_node)) {
 					return "";
 				}
-				// Only a literal `word` is a statically knowable command name. A
-				// `simple_expansion` callee (`$verbose && ...`, `if $DEBUG; then`), a string or a
-				// command substitution resolves at run time, and naming it would record the
-				// VARIABLE rather than the command -- the same class of wrong name as `+%s`.
-				// Python returns "" for `fns[k]()` and JavaScript for `obj[k]()`, so an empty
-				// name is the house answer for a dynamic callee, not a gap.
-				return FindChildByType(name_node, content, "word");
+				// A literal `word` is a statically knowable command name, and is the
+				// common case.
+				string word = FindChildByType(name_node, content, "word");
+				if (!word.empty()) {
+					return word;
+				}
+				// A VARIABLE in command position is named AS WRITTEN, `$` included:
+				// `$verbose && ...` is named `$verbose`, `${CMD} arg` is named `${CMD}`.
+				//
+				// THIS IS NOT A DIVERGENCE FROM PYTHON AND JAVASCRIPT, though it was
+				// argued here as one. This code used to return "" for `$cmd`, citing
+				// python `fns[k]()` and javascript `obj[k]()`, which are both unnamed
+				// (measured, while `foo()` is named in each). The citation was the
+				// mistake. The house rule is that a callee with NO NAME IN THE SOURCE
+				// gets an empty name, and `$cmd` has one. Teague made the distinction on
+				// 2026-11-18; four ways the two cases differ:
+				//
+				//   1. `$cmd` names ONE variable, written right there. `fns[k]` is a
+				//      compound expression -- two variables and a subscript -- and no
+				//      identifier in it names the callee. There is nothing to write down.
+				//   2. Bash has no first-class functions and no function references, so
+				//      expansion in command position is THE way to parameterize a
+				//      command. In python `fns[k]()` is one dispatch idiom among many and
+				//      the subscript form is not privileged.
+				//   3. The written form IS the interface. `$CC`, `$MAKE` and `$PYTHON` in
+				//      a build script are the meaningful unit, and more useful to a reader
+				//      than whatever they resolved to on one machine. `fns[k]` as a name
+				//      would be noise.
+				//   4. `$cmd` often resolves: an assignment is frequently visible in the
+				//      same file (`cmd=/usr/bin/foo`, `: ${CC:=gcc}`). `fns[k]`
+				//      essentially never does.
+				//
+				// "The name as written" is also already the convention for kotlin's
+				// parent types and jsx's `svg:circle`.
+				//
+				// `$VAR` is a simple_expansion; `${VAR}` is an expansion. Both are checked
+				// because the two spellings mean the same thing to a reader.
+				TSNode expansion = FindChildByTypeNode(name_node, "simple_expansion");
+				if (ts_node_is_null(expansion)) {
+					expansion = FindChildByTypeNode(name_node, "expansion");
+				}
+				if (!ts_node_is_null(expansion)) {
+					return ExtractNodeText(expansion, content);
+				}
+				// EVERYTHING ELSE STAYS UNNAMED, and the boundary is the point.
+				// `$(which ls) -l` is a command_substitution, not a variable, and its
+				// inner command already carries the name `which` on its own row -- naming
+				// the outer one would duplicate that fact. `"$cmd" arg` is a string, whose
+				// contents are not knowable. test/sql/languages/bash_variable_named_command.test
+				// section 3 is the negative control for both.
+				return "";
 			}
 			if (node_type == "declaration_command") {
 				// declaration_command nests the variable name 2 levels deep:

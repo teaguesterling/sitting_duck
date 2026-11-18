@@ -1,0 +1,92 @@
+# Does every language still deliver what its declaration table promises?
+#
+# NOT in MainDistributionPipeline.yml on purpose. The kit parses a 70-fixture
+# corpus in 29 languages and cross-checks eight properties per language against
+# ast_type_map() and the committed DEF_TYPE tables. Measured 2026-11-18 on
+# longbottom, 4 cores: 15m22s for the full matrix, 136s for three languages,
+# 32s for the negative controls alone. The repository already judged 6m01s too
+# slow for a per-PR job (see ParserReproducibility.yml), and this is two and a
+# half times that, so it runs on dispatch and on a schedule.
+#
+# WHY IT EXISTS: nothing ran this script. Not CI, not the Makefile, not another
+# script -- measured 2026-11-18, and MainDistributionPipeline.yml's only mention
+# of it was a comment. So the kit's verdict was whatever the last person to run
+# it by hand remembered.
+#
+# IT HAD ALREADY REGRESSED, UNNOTICED. tracker/features/044 records the
+# baseline as `ok=192 FAIL=0 ... exit 0` at cee95ef. Measured on main at
+# 41a21f6: `ok=202 FAIL=2 ... exit 3`. Two checks had gone red and no gate
+# could see it:
+#
+#   * cpp NATIVE-DECL -- three rows in spec/conformance/native-decl-baseline.tsv
+#     recorded node types as declared-but-undelivered after they had started
+#     delivering. That file's contract is bidirectional and says a row that
+#     stops reproducing is itself a finding; nobody was reading it.
+#   * bash CALL-NAMED -- a58821b moved bash's `command` from name strategy NONE
+#     to CUSTOM, which named 92 of 95 call nodes and left 3 impossible. The
+#     declaration moved; the fixture never did.
+#
+# Both are fixed in the branch that adds this file. The point of the file is
+# that the NEXT one gets noticed.
+#
+# THE CHEAP HALF IS NOT WIRED UP YET. `--controls-only` is 32s and proves every
+# check can still detect a planted fault. It needs a built extension, so it is
+# only cheap inside a job that already builds one -- `Runtime grammar
+# registration tests` is the candidate. Left out of this change deliberately:
+# it is a separate decision about that job's scope.
+name: Conformance kit
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Nightly, 06:00 UTC -- an hour after Parser reproducibility's Monday slot,
+    # so the two never contend. Nightly rather than weekly because what this
+    # catches is declaration-versus-delivery drift, which moves with ordinary
+    # code changes, unlike a grammar pin.
+    - cron: '0 6 * * *'
+
+concurrency:
+  group: conformance-kit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  conformance:
+    name: every language delivers what it declares
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      GEN: ninja
+      OVERRIDE_GIT_DESCRIBE: v2.0.0
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkout required submodules
+        # Pre-generated parsers are committed, so the grammar submodules are not
+        # needed. Same three as every other building job here.
+        run: git submodule update --init duckdb extension-ci-tools third_party/tree-sitter
+
+      - name: Ensure PyYAML is available
+        # The kit reads spec/layout/layout.yaml for the `definitions_from`
+        # relation, which is how it knows tsx inherits typescript's table. That
+        # read is guarded by `command -v python3`, so without PyYAML the kit
+        # does not fail -- it silently stops resolving the relation.
+        run: python3 -c "import yaml" || python3 -m pip install --break-system-packages pyyaml
+
+      - name: Install ninja
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+
+      - name: Build release
+        run: make release
+
+      - name: Prove the checks can fail
+        # 32s. Each control plants a fault and requires the named check to
+        # notice. A green matrix from a kit whose checks cannot fail is the
+        # failure mode this step exists to stop, and it is not hypothetical:
+        # NATIVE-DECL was a matrix column with no control until bugs/042.
+        run: ./scripts/conformance_kit.sh --binary build/release/duckdb --controls-only
+
+      - name: Every language delivers what it declares
+        # Exit 3 on any FAIL, in either direction: a declared-and-undelivered
+        # pair that is not baselined, AND a baselined pair that no longer
+        # reproduces.
+        run: ./scripts/conformance_kit.sh --binary build/release/duckdb
