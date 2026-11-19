@@ -177,6 +177,7 @@ FROM test_ast
 WHERE is_definition(semantic_type::UTINYINT) AND name IS NOT NULL AND LENGTH(name) > 0
 ORDER BY node_id;
 ----
+<inline>	DEFINITION_MODULE
 hello	DEFINITION_FUNCTION
 MyClass	DEFINITION_CLASS
 method	DEFINITION_FUNCTION

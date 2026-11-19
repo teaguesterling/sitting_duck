@@ -284,8 +284,15 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType *adapte
 
 			// Context information -> NEW STRUCTURED FIELDS
 			// Only populate context fields based on config.context level
+			//
+			// The root is named by its path, exactly as given (#186): no grammar
+			// gives a root a name, and a basename would make two utils.py files
+			// indistinguishable. It takes the row's own file_path, so it is
+			// '<inline>' for parse_ast and '' below source := 'path', where the
+			// caller asked for no path.
+			const bool is_root = ts_node_eq(entry.node, root);
 			if (config.context >= ContextLevel::NORMALIZED) {
-				string raw_name = adapter->ExtractNodeName(entry.node, content);
+				string raw_name = is_root ? ast_node.file_path : adapter->ExtractNodeName(entry.node, content);
 				ast_node.name_raw = SanitizeUTF8(raw_name);
 			} else {
 				ast_node.name_raw = "";
@@ -479,7 +486,12 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType *adapte
 			// makes qualified_name unique within a file. Counters are keyed on
 			// (semantic_type, name) so V[x] and F[x] in the same scope each track
 			// independently — semantic role already disambiguates them.
-			if (config.context >= ContextLevel::NORMALIZED) {
+			//
+			// The root is excluded (#186). Most roots are DEFINITION_MODULE, so
+			// once named by its path the root would open a segment, and every
+			// qualified_name in the file would start M[<path>]. qualified_name
+			// is unique within a file; file_path tells files apart.
+			if (config.context >= ContextLevel::NORMALIZED && !is_root) {
 				char type_code = SemanticTypes::GetQualifiedNamePrefix(ast_node.semantic_type);
 				if (type_code != '\0' && !ast_node.name_raw.empty()) {
 					// Counter key — stable on (semantic_type, name). We mix in the

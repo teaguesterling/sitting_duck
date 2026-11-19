@@ -15,11 +15,13 @@ WHERE type = 'package_clause';
 ----
 main	DEFINITION_MODULE
 
-# There should be exactly 1 named DEFINITION_MODULE entry (the package)
-# The source_file node is also DEFINITION_MODULE but has no name
+# There should be exactly 1 named DEFINITION_MODULE entry below the root (the
+# package). The source_file root is also DEFINITION_MODULE; since #186 it is
+# named by its path, so it is left out here by parent_id.
 query I
 SELECT COUNT(*) FROM read_ast('test/data/go/simple.go')
-WHERE semantic_type = 'DEFINITION_MODULE' AND name IS NOT NULL AND name != '';
+WHERE semantic_type = 'DEFINITION_MODULE' AND name IS NOT NULL AND name != ''
+  AND parent_id IS NOT NULL;
 ----
 1
 

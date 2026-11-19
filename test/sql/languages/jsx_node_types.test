@@ -245,15 +245,17 @@ WHERE type = 'jsx_expression' AND name IS NOT NULL AND name != '';
 # columns here hides nothing.
 # =============================================================================
 
+# The root's name is blanked: since #186 it is the file's path, which differs
+# between the two files in the same way file_path does.
 query I
 SELECT (SELECT count(*) FROM (
-          SELECT * EXCLUDE (language, file_path, modifiers, signature_type) FROM read_ast('test/data/jsx/shapes.jsx')
+          SELECT * EXCLUDE (language, file_path, modifiers, signature_type) REPLACE (CASE WHEN parent_id IS NULL THEN '' ELSE name END AS name) FROM read_ast('test/data/jsx/shapes.jsx')
           EXCEPT ALL
-          SELECT * EXCLUDE (language, file_path, modifiers, signature_type) FROM read_ast('test/data/tsx/shapes.tsx')))
+          SELECT * EXCLUDE (language, file_path, modifiers, signature_type) REPLACE (CASE WHEN parent_id IS NULL THEN '' ELSE name END AS name) FROM read_ast('test/data/tsx/shapes.tsx')))
      + (SELECT count(*) FROM (
-          SELECT * EXCLUDE (language, file_path, modifiers, signature_type) FROM read_ast('test/data/tsx/shapes.tsx')
+          SELECT * EXCLUDE (language, file_path, modifiers, signature_type) REPLACE (CASE WHEN parent_id IS NULL THEN '' ELSE name END AS name) FROM read_ast('test/data/tsx/shapes.tsx')
           EXCEPT ALL
-          SELECT * EXCLUDE (language, file_path, modifiers, signature_type) FROM read_ast('test/data/jsx/shapes.jsx')));
+          SELECT * EXCLUDE (language, file_path, modifiers, signature_type) REPLACE (CASE WHEN parent_id IS NULL THEN '' ELSE name END AS name) FROM read_ast('test/data/jsx/shapes.jsx')));
 ----
 0
 

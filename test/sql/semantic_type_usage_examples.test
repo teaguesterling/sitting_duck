@@ -21,7 +21,7 @@ WHERE is_definition(semantic_type)
   AND name IS NOT NULL
 ORDER BY start_line;
 ----
-(empty)	DEFINITION_MODULE
+test/data/python/test_classes.py	DEFINITION_MODULE
 calculate_sum	DEFINITION_FUNCTION
 (empty)	DEFINITION_FUNCTION
 DataProcessor	DEFINITION_CLASS
