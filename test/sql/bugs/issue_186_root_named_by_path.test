@@ -50,11 +50,11 @@ SELECT count(*) FROM ast_select('test/data/python/simple.py', 'module[name="simp
 
 # --- qualified_name is unchanged ---------------------------------------------
 # A top-level function's path is still one segment. Before the exception it
-# would have been [M[test/data/python/simple.py], F[hello]].
+# would have started M[test/data/python/simple.py].
 query T
 SELECT ast_qualified_name_as_string(qualified_name) FROM py WHERE type = 'function_definition' AND name = 'hello';
 ----
-hello
+F[hello]
 
 query I
 SELECT count(*) FROM py, unnest(qualified_name) AS u(seg) WHERE seg.name = file_path;
