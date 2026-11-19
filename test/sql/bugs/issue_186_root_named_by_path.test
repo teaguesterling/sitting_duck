@@ -1,0 +1,101 @@
+# name: test/sql/bugs/issue_186_root_named_by_path.test
+# description: #186 — a root node is named by its path, and the name opens no qualified_name segment
+# group: [bugs]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# ---------------------------------------------------------------------------
+# Before: every root came back with name = '' (418 of 418 in test/data/**,
+# zero NULL), so a selector or a join on a module's name could never match.
+#
+# Decided 2026-11-08 (tracker/roadmap/v1.18.3-name-binding.md, "#186 decided"):
+# the name is the path EXACTLY AS GIVEN. A basename would make many files
+# indistinguishable: two utils.py files would both match `module#utils`.
+#
+# Decided 2026-11-18: the root's name does NOT enter qualified_name. 415 of the
+# 418 roots are DEFINITION_MODULE, and a named M node opens a scope segment, so
+# without the exception every qualified_name in a file would start M[<path>].
+# qualified_name is unique within a file; file_path tells files apart.
+# ---------------------------------------------------------------------------
+
+statement ok
+CREATE TABLE py AS SELECT * FROM read_ast('test/data/python/simple.py');
+
+# The root's name is its path, the same value as its file_path column.
+query TT
+SELECT name, name = file_path FROM py WHERE parent_id IS NULL;
+----
+test/data/python/simple.py	true
+
+# Only the root changes. No other node is named after the path.
+query I
+SELECT count(*) FROM py WHERE parent_id IS NOT NULL AND name = file_path;
+----
+0
+
+# The name is reachable from a selector, which is what #186 asked for.
+query I
+SELECT count(*) FROM ast_select('test/data/python/simple.py', 'module[name="test/data/python/simple.py"]');
+----
+1
+
+# The path is literal, not a basename: the basename matches nothing.
+query I
+SELECT count(*) FROM ast_select('test/data/python/simple.py', 'module[name="simple"]');
+----
+0
+
+# --- qualified_name is unchanged ---------------------------------------------
+# A top-level function's path is still one segment. Before the exception it
+# would have been [M[test/data/python/simple.py], F[hello]].
+query T
+SELECT ast_qualified_name_as_string(qualified_name) FROM py WHERE type = 'function_definition' AND name = 'hello';
+----
+hello
+
+query I
+SELECT count(*) FROM py, unnest(qualified_name) AS u(seg) WHERE seg.name = file_path;
+----
+0
+
+# --- parse_ast has no path ---------------------------------------------------
+# Its file_path is the sentinel '<inline>', so its root is named '<inline>'.
+# Every inline parse shares that name: the sources are not distinct files.
+query TT
+SELECT name, file_path FROM parse_ast('x = 1', 'python') WHERE parent_id IS NULL;
+----
+<inline>	<inline>
+
+# --- a hidden path stays hidden ------------------------------------------------
+# Below source := 'path' the row carries no path, so the root's name is ''.
+# The name must not show a path the caller asked to leave out.
+query T
+SELECT name FROM read_ast('test/data/python/simple.py', source := 'none') WHERE parent_id IS NULL;
+----
+(empty)
+
+# --- every language ----------------------------------------------------------
+# All roots, not only Python's `module`: program, source_file, document,
+# translation_unit, chunk, stylesheet, ... and R's program, which is an
+# ORGANIZATION_CONTAINER, not a DEFINITION_MODULE.
+statement ok
+CREATE TABLE corpus AS SELECT * FROM read_ast('test/data/**', ignore_errors := true);
+
+query I
+SELECT count(*) FROM corpus WHERE parent_id IS NULL AND name IS DISTINCT FROM file_path;
+----
+0
+
+query I
+SELECT count(*) > 400 FROM corpus WHERE parent_id IS NULL;
+----
+true
+
+# No qualified_name anywhere in the corpus carries a path segment.
+query I
+SELECT count(*) FROM corpus, unnest(qualified_name) AS u(seg) WHERE seg.name = file_path;
+----
+0
