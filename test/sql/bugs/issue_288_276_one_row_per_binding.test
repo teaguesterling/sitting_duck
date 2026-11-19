@@ -146,10 +146,15 @@ CREATE TABLE corpus AS SELECT * FROM read_ast('test/data/**', ignore_errors := t
 statement ok
 CREATE TABLE corpus_defs AS SELECT * FROM ast_definitions_from('corpus');
 
+# The count leaves out test/data/r/simple.r and test/data/r/simple.R. They are
+# byte-identical and differ only in case, so a case-insensitive checkout
+# (Windows CI) keeps one of them: 5 definitions fewer, 3,728, measured on PR
+# #354's windows_amd64 leg. Leaving out both case variants gives one answer on
+# every platform: 3,733 - 10 on Linux, 3,728 - 5 on Windows.
 query I
-SELECT count(*) FROM corpus_defs;
+SELECT count(*) FROM corpus_defs WHERE lower(file_path) NOT LIKE '%simple.r';
 ----
-3733
+3723
 
 # No surviving row has a same-name parent that also survived.
 query I
