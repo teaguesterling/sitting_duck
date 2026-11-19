@@ -38,12 +38,16 @@ WHERE type = 'function_definition' AND name = 'inner';
 # Test ast_definitions (file-path signature)
 # =============================================================================
 
-# Get all definitions
+# Get all definitions. `self` is the bare parameter of `method`, listed since
+# #288 (the hook binds it; the old semantic-type filter could not see it). It
+# shares line 2 with `method`, so the order breaks ties by node_id: source
+# order, the enclosing definition first.
 query II
-SELECT name, definition_type FROM ast_definitions('test/data/python/macros/definitions.py') ORDER BY start_line;
+SELECT name, definition_type FROM ast_definitions('test/data/python/macros/definitions.py') ORDER BY start_line, node_id;
 ----
 MyClass	class
 method	function
+self	variable
 x	variable
 standalone	function
 MY_CONST	variable

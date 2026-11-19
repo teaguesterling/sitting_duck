@@ -158,9 +158,16 @@ inline bool IsBareNameDefinitionParent<CSharpAdapter>(const char *parent_type) {
 	return std::strcmp(parent_type, "catch_declaration") == 0;
 }
 // #64 Phase 3 — wrapper-based languages: the param NAME identifier's direct parent is
-// the per-param wrapper node. Safe (verified) because the type is a non-identifier node
-// and any default VALUE lives under a different node (optional_parameter_declaration,
-// the param list, the function decl, optional_formal_parameters), so it is not flagged.
+// the per-param wrapper node. Any default VALUE lives under a different node
+// (optional_parameter_declaration, the param list, the function decl,
+// optional_formal_parameters), so it is not flagged.
+//
+// The TYPE is not always a non-identifier node, as this comment once claimed: in go,
+// java, dart, c, cpp and rust a plain type is a `type_identifier` directly under the
+// wrapper (86 rows in test/data/** before the fix). The walker therefore refuses to
+// upgrade any node whose semantic type is TYPE_*, rather than each rule here naming
+// the wrapper's type field -- dart's formal_parameter and kotlin's parameter have no
+// `type` field to name. See unified_ast_backend_impl.hpp, the #64 block.
 // typescript/c#/r are deliberately EXCLUDED here: their default value shares the wrapper
 // node with the name, so the plain rule would mis-flag it — those need first-child/field
 // precision (deferred, tracker/039).
@@ -188,10 +195,6 @@ inline bool IsBareNameDefinitionParent<JavaAdapter>(const char *parent_type) {
 }
 template <>
 inline bool IsBareNameDefinitionParent<KotlinAdapter>(const char *parent_type) {
-	return std::strcmp(parent_type, "parameter") == 0;
-}
-template <>
-inline bool IsBareNameDefinitionParent<SwiftAdapter>(const char *parent_type) {
 	return std::strcmp(parent_type, "parameter") == 0;
 }
 template <>
@@ -229,6 +232,16 @@ inline bool IsBareNameDefinitionField<CSharpAdapter>(TSNode self, TSNode parent,
 // R: parameter — name is field `name`; the default is field `default` (excluded).
 template <>
 inline bool IsBareNameDefinitionField<RAdapter>(TSNode self, TSNode parent, const char *parent_type) {
+	return std::strcmp(parent_type, "parameter") == 0 &&
+	       ts_node_eq(self, ts_node_child_by_field_name(parent, "name", 4));
+}
+// Swift: parameter — the local name is field `name`. The argument LABEL is field
+// `external_name` (`by` in `func move(by amount: Int)`, or `_`), and it is a
+// simple_identifier directly under the same wrapper, so the parent-type rule this
+// replaced flagged the label as a second binding. A caller writes the label; only the
+// local name is bound inside the body.
+template <>
+inline bool IsBareNameDefinitionField<SwiftAdapter>(TSNode self, TSNode parent, const char *parent_type) {
 	return std::strcmp(parent_type, "parameter") == 0 &&
 	       ts_node_eq(self, ts_node_child_by_field_name(parent, "name", 4));
 }

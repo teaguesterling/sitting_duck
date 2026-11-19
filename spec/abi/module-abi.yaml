@@ -401,7 +401,6 @@ hooks:
       - PythonAdapter
       - RubyAdapter
       - RustAdapter
-      - SwiftAdapter
       - TypeScriptAdapter
       - TSXAdapter
 
@@ -415,6 +414,7 @@ hooks:
       - PythonAdapter
       - RAdapter
       - RustAdapter
+      - SwiftAdapter
       - TypeScriptAdapter
       - TSXAdapter
 

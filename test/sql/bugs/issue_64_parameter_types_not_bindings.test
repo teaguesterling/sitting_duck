@@ -1,0 +1,117 @@
+# name: test/sql/bugs/issue_64_parameter_types_not_bindings.test
+# description: #64 follow-up (#288 step 1) — a parameter's TYPE and a Swift argument LABEL bind no name
+# group: [bugs]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# ---------------------------------------------------------------------------
+# Why this exists. #64's parent-type rule (native_context_extraction.hpp,
+# IsBareNameDefinitionParent) upgrades EVERY NAME_REFERENCE child of a
+# parameter wrapper to NAME_DEFINITION. Its comment says "the type is a
+# non-identifier node". That is false for six grammars: the type is a
+# `type_identifier` directly under the wrapper, so `Point` in `f(Point p)` was
+# flagged as a name the parameter binds.
+#
+# Measured before the fix, on cdaa5df over test/data/**: 86 flagged TYPE_* rows
+# (go 42, dart 16, java 15, c 8, cpp 3, rust 2), and 15 ast_resolve() rows that
+# bind a use of a type to some parameter's type -- e.g. three uses of `int` in
+# test/data/dart/sample.dart resolve to the parameter type on line 198.
+#
+# #288 is about to make ast_definitions() read the binding role, so these
+# false binders would reach the public macro. They are fixed first.
+#
+# What each block asserts is the NAME the parameter binds, `p`, AND the absence
+# of its type. A test that only checked the absence would pass if the fix
+# stopped flagging parameters at all.
+# ---------------------------------------------------------------------------
+
+# One row per language: the bare names flagged as definitions, excluding the
+# DEFINITION_* wrapper rows (those are the .def's, not the hook's).
+query TT rowsort
+SELECT 'go', string_agg(type || ':' || name, ',' ORDER BY node_id)
+FROM parse_ast('package m
+func f(p Point) {}', 'go')
+WHERE is_name_definition(flags) AND (semantic_type & 240) != 240
+UNION ALL
+SELECT 'java', string_agg(type || ':' || name, ',' ORDER BY node_id)
+FROM parse_ast('class C{void m(Point p){}}', 'java')
+WHERE is_name_definition(flags) AND (semantic_type & 240) != 240
+UNION ALL
+SELECT 'dart', string_agg(type || ':' || name, ',' ORDER BY node_id)
+FROM parse_ast('void f(Point p){}', 'dart')
+WHERE is_name_definition(flags) AND (semantic_type & 240) != 240
+UNION ALL
+SELECT 'c', string_agg(type || ':' || name, ',' ORDER BY node_id)
+FROM parse_ast('void f(Point p){}', 'c')
+WHERE is_name_definition(flags) AND (semantic_type & 240) != 240
+UNION ALL
+SELECT 'cpp', string_agg(type || ':' || name, ',' ORDER BY node_id)
+FROM parse_ast('void f(Point p){}', 'cpp')
+WHERE is_name_definition(flags) AND (semantic_type & 240) != 240
+UNION ALL
+SELECT 'rust', string_agg(type || ':' || name, ',' ORDER BY node_id)
+FROM parse_ast('fn f(p: Point){}', 'rust')
+WHERE is_name_definition(flags) AND (semantic_type & 240) != 240;
+----
+c	identifier:p
+cpp	identifier:p
+dart	identifier:p
+go	identifier:p
+java	identifier:p
+rust	identifier:p
+
+# ---------------------------------------------------------------------------
+# Swift. `parameter` has fields external_name, name and type
+# (tree-sitter-swift node-types.json), and the parent-type rule flagged both
+# simple_identifiers: the argument LABEL `by` / `_` and the local name. A
+# caller writes the label; only the local name is bound inside the body.
+#
+# Not asserted here, and filed separately: the `parameter` WRAPPER row is
+# still named after the label (`by`, `_`). That is name extraction, not role.
+# ---------------------------------------------------------------------------
+query T
+SELECT string_agg(name, ',' ORDER BY node_id)
+FROM parse_ast('func move(by amount: Int, _ x: Int){}', 'swift')
+WHERE is_name_definition(flags) AND type = 'simple_identifier';
+----
+amount,x
+
+# A Swift parameter WITHOUT a label still binds its one name.
+query T
+SELECT string_agg(name, ',' ORDER BY node_id)
+FROM parse_ast('func f(aa: Int){}', 'swift')
+WHERE is_name_definition(flags) AND type = 'simple_identifier';
+----
+aa
+
+# ---------------------------------------------------------------------------
+# The corpus, so a grammar this file did not think of is caught too.
+# Before: 86. Kind 0x70 is TYPE (semantic_types.hpp).
+# ---------------------------------------------------------------------------
+query I
+SELECT count(*) FROM read_ast('test/data/**', ignore_errors := true)
+WHERE is_name_definition(flags) AND (semantic_type & 240) = 112;
+----
+0
+
+# ---------------------------------------------------------------------------
+# The consequence that made this matter: scope resolution. ast_resolve()
+# joins references to definitions by name inside the scope chain, so a
+# flagged type became a target. Before: 15 rows (go 6, java 4, dart 4, cpp 1).
+# ---------------------------------------------------------------------------
+statement ok
+CREATE TABLE typed AS SELECT * FROM read_ast(['test/data/**/*.go', 'test/data/**/*.java', 'test/data/**/*.dart',
+                                              'test/data/**/*.c', 'test/data/**/*.cpp', 'test/data/**/*.rs'],
+                                             ignore_errors := true);
+
+query I
+SELECT count(*)
+FROM ast_resolve(['test/data/**/*.go', 'test/data/**/*.java', 'test/data/**/*.dart',
+                  'test/data/**/*.c', 'test/data/**/*.cpp', 'test/data/**/*.rs']) r
+JOIN typed d ON d.node_id = r.def_node_id AND d.file_path = r.file_path
+WHERE (d.semantic_type & 240) = 112;
+----
+0

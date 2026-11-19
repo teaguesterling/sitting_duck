@@ -406,15 +406,18 @@ FROM core_ast;
 #   node_id 71  function_definition `load`, lines 16-19
 #   node_id 85  call `open`, line 17
 #
-# ast_definitions_from and ast_definition_parent both return 42 here, and that
-# is not a copy-paste. MEASURED: 42 is the number of nodes that pass
-# ast_definitions_from's FULL filter chain -- is_definition(semantic_type) AND
-# is_construct(flags) AND name <> '' -- and ast_definition_parent emits one row
-# per such node. The chain matters: this file has 78 nodes with a definition
-# semantic type, and 55 of those are construct-flagged, so neither of those two
-# figures is the answer. The macro's own banner says why (a keyword token shares
-# the semantic type of the construct it introduces, so is_definition alone
-# double-counts).
+# ast_definition_parent returns 42: one row per node passing the semantic-type
+# chain -- is_definition(semantic_type) AND is_construct(flags) AND name <> ''.
+# The chain matters: this file has 78 nodes with a definition semantic type,
+# and 55 of those are construct-flagged, so neither figure is the answer (a
+# keyword token shares the semantic type of the construct it introduces).
+#
+# ast_definitions_from returned the same 42 until #288/#276, and now returns
+# 83. MEASURED: it selects by name role (tree_navigation.sql, rule B), so the
+# 41 names the bare-name hook binds are now listed -- 37 bare parameters and
+# loop targets, and 4 `except/with ... as` targets. No row collapses in this
+# file. ast_definition_parent keeps the old chain on purpose; the approved plan
+# leaves it out of this change. The two figures differing is the point.
 #
 # ONE ROW PER MACRO, so a failure names the macro. A single wide row of 11
 # counts would have the same assertion count and tell you only that something
@@ -439,7 +442,7 @@ ast_children	16
 ast_class_members	3
 ast_containing_line_from	23
 ast_definition_parent	42
-ast_definitions_from	42
+ast_definitions_from	83
 ast_descendants	117
 ast_function_scope	46
 ast_in_range_from	118

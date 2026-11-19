@@ -82,7 +82,10 @@ SELECT count(*) FROM (
 # 2. Each macro still answers from its own parse of qualified_names.py.
 #    Column order: has, not_has, inside, precedes, follows, in_range,
 #    containing_line, definitions, source_of.
-#    A capturing build would instead give:  14, 6, 18, 0, 5, 34, 2, 42, 0.
+#    A capturing build would instead give:  14, 6, 18, 0, 5, 34, 2, 83, 0.
+#    (definitions: 42 -> 83 and 11 -> 17 since #288/#276 listed the names the
+#    bare-name hook binds; for qualified_names.py those are four `self`,
+#    `name` and `owner`. The two figures still differ, so the check holds.)
 query IIIIIIIII
 SELECT
   (SELECT count(*) FROM ast_has('test/data/python/qualified_names.py', 'function_definition', 'return_statement')),
@@ -95,7 +98,7 @@ SELECT
   (SELECT count(*) FROM ast_definitions('test/data/python/qualified_names.py')),
   (SELECT count(*) FROM ast_source_of('test/data/python/qualified_names.py', 'Account'));
 ----
-3	3	3	1	1	52	13	11	1
+3	3	3	1	1	52	13	17	1
 
 # 3. The decoy would have changed every one of those nine answers. The same
 #    calls through the `_from` variants, pointed at the decoy by name. The
@@ -113,4 +116,4 @@ SELECT
   (SELECT count(*) FROM ast_definitions_from('__ast_definitions_src')),
   (SELECT count(*) FROM __ast_source_of_src WHERE name = 'Account');
 ----
-14	6	18	0	5	34	2	42	0
+14	6	18	0	5	34	2	83	0

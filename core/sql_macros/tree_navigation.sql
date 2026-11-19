@@ -56,63 +56,118 @@ CREATE OR REPLACE MACRO ast_call_arguments(ast_table, call_node_id) AS TABLE
 --   CREATE TABLE my_ast AS SELECT * FROM read_ast('src/**/*.py');
 --   SELECT * FROM ast_definitions_from('my_ast')
 --
--- Reads semantic_type, flags and name. A table whose semantic_type is NULL
--- returns no rows rather than raising: every comparison against NULL is NULL,
--- so the filter matches nothing. That is the NULL-definite convention issue #81
+-- Reads name, flags, semantic_type, node_id, parent_id and file_path. A NULL
+-- in flags, semantic_type or parent_id returns no rows rather than raising.
+-- parent_id is load-bearing since #288/#276: it excludes roots and drives the
+-- collapse, so a table without it cannot be answered and is not guessed at.
+-- That is the NULL-definite convention issue #81
 -- set for the selector attribute filters (see the NULL semantics note in
 -- css_selectors.sql), and these macros follow it instead of validating columns.
 --
--- IMPORTANT, and the reason to call this instead of writing the query yourself:
--- a definition query over a parsed AST table needs the FULL filter chain --
--- is_definition(semantic_type) AND is_construct(flags) AND name != ''. Using
--- is_definition() alone also matches keyword tokens (def, class, CREATE, ...),
--- because a keyword shares the semantic type of the construct it introduces,
--- so every definition comes back twice. This macro applies the whole chain.
--- The same warning is on ast_definitions below, for the path-taking form.
+-- What counts, and the reason to call this instead of writing the query
+-- yourself (#288, #276; the measured plan is in
+-- tracker/roadmap/v1.18.3-name-binding.md):
+--
+--   BINDING   a named, non-root node whose name role is DEFINITION or
+--             DECLARATION -- including a bare name the per-language hook binds
+--             (a parameter, a loop target, a catch variable, a destructuring
+--             leaf), whose semantic type stays NAME_IDENTIFIER. Or a node with
+--             NO name role whose semantic type is a definition kind and which is
+--             a construct: the SQL adapter sets no role, so this keeps
+--             CREATE TABLE / VIEW / FUNCTION. is_construct() keeps the keyword
+--             tokens (def, class, CREATE) out, since a keyword shares the
+--             semantic type of the construct it introduces.
+--   COLLAPSE  a binding whose DIRECT parent is a binding with the same name is
+--             dropped, so `const f = () => {}` is one row, not three. Direct only:
+--             a constructor is named after its class with a class body between
+--             them, and it is a separate definition.
+--   KIND      the strongest kind in the collapsed chain (function > class >
+--             type > module > variable), so `const f = () => {}` is a function.
+--             A bare hook-bound name is a variable.
+--
+-- Roots are excluded (parent_id IS NULL): a root names the file, not something
+-- the file defines. The same rule serves ast_definitions below and
+-- ast_resolve_entity in tree_analysis.sql, which both delegate here.
 -- ----------------------------------------------------------------------------
 -- ast_definitions_from: Every definition (function, class, variable, module) in a parsed AST table
 -- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_definitions_from(ast_table) AS TABLE
-    WITH ast AS (
-        SELECT * FROM query_table(ast_table)
-    )
+    WITH RECURSIVE
+        ast AS (
+            SELECT * FROM query_table(ast_table)
+        ),
+        bindings AS (
+            SELECT
+                a.*,
+                CASE
+                    WHEN is_function_definition(a.semantic_type) THEN 'function'
+                    WHEN is_class_definition(a.semantic_type) THEN 'class'
+                    WHEN is_variable_definition(a.semantic_type) THEN 'variable'
+                    WHEN is_module_definition(a.semantic_type) THEN 'module'
+                    WHEN is_type_definition(a.semantic_type) THEN 'type'
+                    WHEN is_definition(a.semantic_type) THEN 'other'
+                    ELSE 'variable'
+                END AS own_kind
+            FROM ast a
+            WHERE a.name IS NOT NULL AND a.name != ''
+              AND a.parent_id IS NOT NULL
+              -- NULL-definite (#81): the kind is read from semantic_type, so a
+              -- NULL there must empty the answer, not default every row to
+              -- 'variable'. Without this the role test (TRUE OR NULL) passes.
+              AND a.semantic_type IS NOT NULL
+              AND (is_name_definition(a.flags)
+                   OR is_name_declaration(a.flags)
+                   OR (NOT is_name_reference(a.flags)
+                       AND is_definition(a.semantic_type)
+                       AND is_construct(a.flags)))
+        ),
+        survivors AS (
+            SELECT c.* FROM bindings c
+            WHERE NOT EXISTS (
+                SELECT 1 FROM bindings p
+                WHERE p.file_path = c.file_path AND p.node_id = c.parent_id AND p.name = c.name)
+        ),
+        chain(file_path, survivor_id, node_id, name, own_kind) AS (
+            SELECT file_path, node_id, node_id, name, own_kind FROM survivors
+            UNION ALL
+            SELECT b.file_path, ch.survivor_id, b.node_id, b.name, b.own_kind
+            FROM chain ch
+            JOIN bindings b ON b.file_path = ch.file_path AND b.parent_id = ch.node_id AND b.name = ch.name
+        ),
+        strongest AS (
+            SELECT file_path, survivor_id,
+                   arg_max(own_kind, CASE own_kind WHEN 'function' THEN 5 WHEN 'class' THEN 4
+                                     WHEN 'type' THEN 3 WHEN 'module' THEN 2 WHEN 'variable' THEN 1 ELSE 0 END) AS kind
+            FROM chain GROUP BY file_path, survivor_id
+        )
     SELECT
-        a.name,
-        CASE
-            WHEN is_function_definition(a.semantic_type) THEN 'function'
-            WHEN is_class_definition(a.semantic_type) THEN 'class'
-            WHEN is_variable_definition(a.semantic_type) THEN 'variable'
-            WHEN is_module_definition(a.semantic_type) THEN 'module'
-            WHEN is_type_definition(a.semantic_type) THEN 'type'
-            ELSE 'other'
-        END AS definition_type,
-        a.language,
-        a.file_path,
-        a.start_line,
-        a.end_line,
-        a.node_id,
-        a.type,
-        a.semantic_type
-    FROM ast a
-    WHERE is_definition(a.semantic_type)
-      AND is_construct(a.flags)
-      AND a.name IS NOT NULL AND a.name != ''
-    ORDER BY a.file_path, a.start_line;
+        s.name,
+        k.kind AS definition_type,
+        s.language,
+        s.file_path,
+        s.start_line,
+        s.end_line,
+        s.node_id,
+        s.type,
+        s.semantic_type
+    FROM survivors s
+    JOIN strongest k ON k.file_path = s.file_path AND k.survivor_id = s.node_id
+    -- node_id breaks ties in source order. A function and its bare parameters
+    -- share a start line now that parameters are listed, and without it their
+    -- order would be whatever the join produced.
+    ORDER BY s.file_path, s.start_line, s.node_id;
 
 -- Get all definitions (functions, classes, variables, etc.) with unified categories
 -- Usage: SELECT * FROM ast_definitions('src/**/*.py')
 -- Usage: SELECT * FROM ast_definitions('src/main.py', language := 'python')
 --
--- IMPORTANT: When querying definitions from raw read_ast() output, always use the
--- full filter chain: is_definition(semantic_type) AND is_construct(flags) AND name != ''
--- Using is_definition() alone will include keyword tokens (def, class, CREATE, etc.)
--- as duplicates, since keywords share the semantic type of their parent construct.
+-- The rule for what counts as a definition is on ast_definitions_from above.
 -- ----------------------------------------------------------------------------
 -- ast_definitions: Every definition (function, class, variable, module) in the source
 -- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_definitions(source, language := NULL) AS TABLE
     -- Parse, then delegate to ast_definitions_from, which holds the projection,
-    -- the filter chain and the ORDER BY.
+    -- the binding rule and the ORDER BY.
     WITH __ast_definitions_src AS (
         SELECT * FROM read_ast(source, language)
     )

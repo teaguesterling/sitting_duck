@@ -673,7 +673,14 @@ void PopulateSemanticFieldsTemplated(ASTNode &node, const AdapterType *adapter, 
 		// list) introduces a name. Those positions have no distinct wrapper node whose
 		// .def flags could carry NAME_DEFINITION, so upgrade the role here from the
 		// per-adapter rule. Only touches nodes the .def left as NAME_REFERENCE.
-		if ((node.universal_flags & ASTNodeFlags::NAME_ROLE_MASK) == ASTNodeFlags::NAME_REFERENCE) {
+		//
+		// A TYPE_* node is never upgraded. The parent-type rules name a parameter
+		// wrapper, and in six grammars the parameter's type is a `type_identifier`
+		// directly under that wrapper -- `Point` in `f(Point p)` was being flagged as
+		// a name the parameter binds, and ast_resolve() then bound uses of `Point` to
+		// it. A type names something defined elsewhere; it never introduces a name.
+		if ((node.universal_flags & ASTNodeFlags::NAME_ROLE_MASK) == ASTNodeFlags::NAME_REFERENCE &&
+		    SemanticTypes::GetKind(node.semantic_type) != SemanticTypes::TYPE) {
 			TSNode name_parent = ts_node_parent(ts_node);
 			if (!ts_node_is_null(name_parent)) {
 				const char *name_parent_type = ts_node_type(name_parent);

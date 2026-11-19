@@ -7,8 +7,10 @@
 
 -- #99: durable citation resolution. Given a FILE and an entity NAME, return the entity's
 -- CURRENT line range language-agnostically -- callers need not pin tree-sitter node-type
--- strings (`function_definition` etc. vary by grammar); the filter is semantic
--- (is_definition + is_construct, the same chain as ast_definitions).
+-- strings (`function_definition` etc. vary by grammar). What counts as an entity, and
+-- its kind, is exactly what ast_definitions_from returns: this delegates to it, so
+-- a hook-bound name resolves, and a name a container and its declarator share
+-- resolves once (#288, #276).
 --
 -- Also returns `qualified_name` (name + enclosing scope, e.g. `C[User] F[__init__]`) as a
 -- STABLE IDENTITY: when a name occurs more than once, it disambiguates which entity a
@@ -24,26 +26,21 @@
 -- ast_resolve_entity: Find a named entity by name and optional kind, within one file
 -- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_resolve_entity(path, entity_name, kind := NULL, language := NULL) AS TABLE
-    WITH defs AS (
+    WITH __ast_resolve_entity_src AS (
+        SELECT * FROM read_ast(path, language)
+    ),
+    defs AS (
         SELECT
-            a.name,
-            CASE
-                WHEN is_function_definition(a.semantic_type) THEN 'function'
-                WHEN is_class_definition(a.semantic_type) THEN 'class'
-                WHEN is_variable_definition(a.semantic_type) THEN 'variable'
-                WHEN is_module_definition(a.semantic_type) THEN 'module'
-                WHEN is_type_definition(a.semantic_type) THEN 'type'
-                ELSE 'other'
-            END AS entity_kind,
-            a.start_line,
-            a.end_line,
+            d.name,
+            d.definition_type AS entity_kind,
+            d.start_line,
+            d.end_line,
             ast_qualified_name_as_string(a.qualified_name) AS qualified_name,
-            a.language,
-            a.file_path
-        FROM read_ast(path, language) a
-        WHERE a.name = entity_name
-          AND is_definition(a.semantic_type)
-          AND is_construct(a.flags)
+            d.language,
+            d.file_path
+        FROM ast_definitions_from('__ast_resolve_entity_src') d
+        JOIN __ast_resolve_entity_src a ON a.file_path = d.file_path AND a.node_id = d.node_id
+        WHERE d.name = entity_name
     )
     SELECT name, entity_kind, start_line, end_line, qualified_name, language, file_path
     FROM defs
