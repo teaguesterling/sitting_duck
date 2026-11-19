@@ -200,7 +200,7 @@ FROM ast_source_of('test/data/python/q*.py', '__init__') r;
 #
 #   target      kind := NULL   kind := 'module'   kind := 'variable'
 #   --------    ------------   ----------------   ------------------
-#   ''                     7                  2                   5
+#   ''                     5                  0                   5
 #
 #   target      kind := NULL   kind := 'function'   kind := 'class'
 #   --------    ------------   ------------------   ---------------
@@ -212,6 +212,12 @@ FROM ast_source_of('test/data/python/q*.py', '__init__') r;
 # node and the un-named variable targets of this fixture are reachable by it.
 # That is pinned here as pre-existing behaviour, and is not something this task
 # changed.
+#
+# CHANGED for #186: the '' row was 7 / 2 / 5. The two module rows were the two
+# files' roots; a root is now named by its path, so '' no longer reaches it.
+# Measured: the 5 remaining rows are exactly the old 7 minus those two roots.
+# Coverage lost: '' was this fixture's only multi-kind target, so kind := NULL
+# over a multi-kind target is no longer exercised here.
 
 query IIII
 SELECT
@@ -223,7 +229,7 @@ SELECT
 4	4	0	0
 
 # The non-empty-into-non-empty split, and its own kind := NULL control beside
-# it. Without the 7 the two filtered counts could both come from a body that
+# it. Without the 5 the two filtered counts could both come from a body that
 # lost rows for an unrelated reason.
 query IIIIII
 SELECT
@@ -234,15 +240,15 @@ SELECT
   (SELECT count(*) FROM ast_source_of_from('tq', 'test/data/python/q*.py', '', kind := 'variable')),
   (SELECT count(*) FROM ast_source_of('test/data/python/q*.py', '', kind := 'variable'));
 ----
-7	7	2	2	5	5
+5	5	0	0	5	5
 
-# The whole row for the seven-row result, so a column change on the kind := NULL
+# The whole row for the five-row result (seven before #186), so a column change on the kind := NULL
 # path over a multi-kind target is also visible.
 query II
 SELECT count(*), md5(string_agg(r::VARCHAR, ',' ORDER BY r.file_path || ':' || r.start_line))
 FROM ast_source_of_from('tq', 'test/data/python/q*.py', '') r;
 ----
-7	c39db0870afaf395a4bac17ceb90e317
+5	d48cfaa214a2c80d17c7dfbb116a51f8
 
 # `kind` admits as well as rejects on a single-row target, in both directions.
 query IIII
@@ -465,10 +471,11 @@ FROM (SELECT {'f': file_path, 's': start_line} AS k
 ----
 true	true
 
-# The seven-row result as well, which spreads more rows across the same two
-# files and so exercises the within-file half of the ordering harder.
+# The '' result as well, which spreads more rows across the same two files and
+# so exercises the within-file half of the ordering harder. Five rows since
+# #186 (seven before: the two roots are now named by their paths).
 query II
-SELECT list(k) = list_sort(list(k)), count(*) >= 7
+SELECT list(k) = list_sort(list(k)), count(*) >= 5
 FROM (SELECT {'f': file_path, 's': start_line} AS k
       FROM ast_source_of_from('tq', 'test/data/python/q*.py', ''));
 ----

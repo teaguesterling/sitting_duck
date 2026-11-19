@@ -161,7 +161,10 @@ C[User] F[validate]
 query I
 SELECT COUNT(*)
 FROM read_ast('test/data/python/qualified_names.py', 'python')
-WHERE is_definition(semantic_type) AND name != '' AND qualified_name IS NULL;
+WHERE is_definition(semantic_type) AND name != '' AND qualified_name IS NULL
+  -- The root is the one exception: named by its path (#186), it opens no
+  -- qualified_name segment by decision, so its own qualified_name is NULL.
+  AND parent_id IS NOT NULL;
 ----
 0
 

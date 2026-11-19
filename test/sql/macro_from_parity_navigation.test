@@ -162,11 +162,13 @@ SELECT count(*) FROM (
 ----
 0
 
+# Re-baselined for #186 (was d61534847a4411d8a1f8fc3b4b2babc9). Measured: the
+# only row that differs is the root, node 0, whose name is now its path.
 query II
 SELECT count(*), md5(string_agg(r::VARCHAR, ',' ORDER BY r.file_path || ':' || r.node_id))
 FROM ast_containing_line_from('t', 10) r;
 ----
-5	d61534847a4411d8a1f8fc3b4b2babc9
+5	f17dafed5ddc2281754ebd6c5a06d773
 
 # A line number the wrapper could have hard-coded or dropped: the answer must
 # change with it. Measured pre-change on the same file.
@@ -344,17 +346,20 @@ FROM ast_definitions('test/data/python/q*.py') r;
 ----
 37	a50a93855724f64ba17cbe4841b17b50
 
+# RE-BASELINED for #186 (both containing_line pins, same digest). Measured: the
+# only rows that differ are the two files' roots, whose name is now their path.
+# Before: 7  1e566d1b6bba4832e86fdc07da33855b. The in_range pins do not move.
 query II
 SELECT count(*), md5(string_agg(r::VARCHAR, ',' ORDER BY r.file_path || ':' || r.node_id))
 FROM ast_containing_line_from('tq', 10) r;
 ----
-7	1e566d1b6bba4832e86fdc07da33855b
+7	50a92c0881f437ce3648d921e1d28036
 
 query II
 SELECT count(*), md5(string_agg(r::VARCHAR, ',' ORDER BY r.file_path || ':' || r.node_id))
 FROM ast_containing_line('test/data/python/q*.py', 10) r;
 ----
-7	1e566d1b6bba4832e86fdc07da33855b
+7	50a92c0881f437ce3648d921e1d28036
 
 query II
 SELECT count(*), md5(string_agg(r::VARCHAR, ',' ORDER BY r.file_path || ':' || r.node_id))
@@ -522,11 +527,12 @@ SELECT
 7	0	148	0
 
 # The whole row, so a column dropped or retyped on this path is also visible.
+# RE-BASELINED for #186: the two roots' names, as above. Before: 74ab1b2f0103a74eebf548f70d9cbb5b.
 query II
 SELECT count(*), md5(string_agg(r::VARCHAR, ',' ORDER BY r.file_path || ':' || r.node_id))
 FROM ast_containing_line_from('tq_nullpar', 10) r;
 ----
-7	74ab1b2f0103a74eebf548f70d9cbb5b
+7	2ace7b7a3dc35c7f2a128b579aa20a12
 
 query II
 SELECT count(*), md5(string_agg(r::VARCHAR, ',' ORDER BY r.file_path || ':' || r.node_id))

@@ -39,7 +39,7 @@ FROM read_ast('test/data/python/simple.py', 'python',
     peek := 'smart')
 LIMIT 3;
 ----
-(empty)	1	NULL	def hello():
+test/data/python/simple.py	1	NULL	def hello():
 hello	1	0	def hello():
 (empty)	1	1	def
 
@@ -54,7 +54,7 @@ FROM read_ast('test/data/python/simple.py', 'python',
 ORDER BY node_id
 LIMIT 2;
 ----
-(empty)	1	1	4
+test/data/python/simple.py	1	1	4
 hello	1	1	5
 
 # Test 4: Removed read_ast_hierarchical (deprecated)
@@ -69,7 +69,7 @@ FROM parse_ast('def hello(): pass', 'python',
     peek := 'smart')
 LIMIT 3;
 ----
-(empty)	1	NULL	def hello(): pass
+<inline>	1	NULL	def hello(): pass
 hello	1	0	def hello(): pass
 (empty)	1	1	def
 
@@ -111,7 +111,7 @@ FROM parse_ast_flat('def hello(): pass', 'python',
     peek := 'smart')
 LIMIT 3;
 ----
-(empty)	1	NULL	def hello(): pass
+<inline>	1	NULL	def hello(): pass
 hello	1	0	def hello(): pass
 (empty)	1	1	def
 
