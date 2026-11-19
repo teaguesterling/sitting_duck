@@ -133,6 +133,10 @@ CREATE OR REPLACE MACRO ast_to_blocks_from(
         -- implementation detail, not document structure — a function's
         -- parameters already appear in its heading signature, so they are
         -- excluded here (scope.function != 0 means "inside a function").
+        -- The root is excluded too, as in ast_definitions_from: it is named by
+        -- its path (#186), and the metadata block already says which file
+        -- this is. As a heading it would also become every definition's
+        -- ancestor and push each heading one level deeper.
         defs AS (
             SELECT
                 a.file_path,
@@ -158,6 +162,7 @@ CREATE OR REPLACE MACRO ast_to_blocks_from(
             WHERE is_definition(a.semantic_type)
               AND is_construct(a.flags)
               AND a.name IS NOT NULL AND a.name != ''
+              AND a.parent_id IS NOT NULL
               AND NOT (is_variable_definition(a.semantic_type)
                        AND coalesce(a.scope.function, 0) != 0)
         ),
