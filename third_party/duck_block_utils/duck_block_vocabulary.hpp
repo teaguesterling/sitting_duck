@@ -1,9 +1,33 @@
+// clang-format off
 #pragma once
-// Vendored at upstream commit: 95a84e6 (SPEC_VERSION 1.4), synced 2026-09-14.
+// Vendored at upstream commit: c978e07 (SPEC_VERSION 1.4), synced 2026-11-20.
 // Taken from a pinned git object (`git show <sha>:<path>`), not a branch URL, and
 // verified byte-identical to it. Replace this line on every re-vendor: provenance has
 // to travel WITH the file, because a fork, a copy or a squash sees this header and not
 // the commit that introduced it. (Restored here -- the 1.2 sync dropped it.)
+//
+// THIS FILE IS NOT FORMATTED, deliberately. It is the one vendorable file four other
+// extensions copy byte-for-byte, and its provenance contract is that a copy stamped with
+// an upstream sha is byte-identical to this file at that sha. A formatter sweep breaks
+// that: panduck ran `format.py` over "all files" on 2026-09-21, which reflowed their
+// vendored copy's comments AND the provenance stamp itself, leaving their own
+// check-vocabulary red with "stamp malformed" while every constant still validated.
+// Constants-only drift checks cannot see it; only a byte-exact provenance arm can.
+//
+// extension-ci-tools runs `duckdb/scripts/format.py --directories src test`, and this
+// file lives in src/include/, so it IS in scope. format.py's ignore list lives inside the
+// duckdb submodule, where a consumer cannot durably add an entry -- so the marker travels
+// with the file instead, and every consumer inherits it on re-vendor rather than each
+// having to re-add an exclusion (markdown's suggestion, 2026-09-21; they verified the
+// markers affect neither their constant parsing nor their stamp regex).
+//
+// A consumer whose formatter ignores these markers still owes the exclusion; see the
+// "VENDORING THIS FILE" block below, which is where that guidance lives.
+//
+// The marker sits ABOVE `#pragma once` on purpose. A consumer inserts its provenance
+// stamp at the TOP of its copy -- panduck's sits at line 3 -- and anything above the
+// marker is unguarded. Their sweep mangled the STAMP, not the vocabulary, which is the
+// failure this placement prevents (panduck's caveat, 2026-09-21).
 
 // ============================================================================
 // The duck_block vocabulary -- PUBLISHED INTERFACE.
@@ -97,7 +121,23 @@
 //          duckdb_duck_block_utils/<sha>/src/include/duck_block_vocabulary.hpp
 //
 //      Print the sha alongside the verdict, so the output says what it actually
-//      compared against. And when the sha lookup fails -- rate limit, outage,
+//      compared against. And NAME THE REFERENCE YOU TRACK, because the fleet
+//      splits here and both halves are conforming: duckdb_markdown's check resolves
+//      upstream MAIN, while panduck's and this repo's compare against the latest
+//      RELEASE TAG with the same SPEC_VERSION major. Tracking main sees an addition
+//      the moment it merges -- including one later reverted that never ships;
+//      tracking releases sees only what is installable, and so stays quiet while
+//      main is ahead. The example below resolves `commits/main` because that is the
+//      fetch mechanics, NOT a recommendation to compare against main. Say which you
+//      used in the verdict, or a reader cannot tell a quiet check from a check that
+//      is looking somewhere else -- the same defect as printing OK from a fetch you
+//      could not date, which this section already refuses. (markdown measured the
+//      asymmetry on 2026-09-24, after I told them their own checker compared against
+//      the release when it does not.)
+//
+//      Under EITHER reference, a copy missing only additive constants at the same or
+//      an older minor is BEHIND, not drift: it reports and passes. Re-vendor when you
+//      need something a later minor added, or on a MAJOR change. And when the sha lookup fails -- rate limit, outage,
 //      offline -- falling back to the branch url is fine, but that path must NEVER
 //      print OK: "no drift seen" from a copy you could not date is not a clean
 //      bill of health, and reporting it as one is the same defect again.
@@ -441,6 +481,27 @@ struct DuckBlockVocabulary {
 	//               (descendants strictly deeper than their root) and validated (L6).
 	//               PREDICATE_REVISION added (see below). Additive.
 	//
+	//   1.4 (amended 2026-09-16)  THE EXPLICIT DOCUMENT ROOT. TYPE_DOCUMENT added, and
+	//               level 0 is now legal for kind='block' element_type='document' rows
+	//               and nothing else. A relation may carry SEVERAL -- one per document,
+	//               each opening the next -- so such a row is legal wherever it appears. Everything else still starts
+	//               at 1, so every document valid before this is valid after it, unchanged -- the change only makes a
+	//               previously-refused shape legal. Teague's ruling: the 1-based top was chosen to leave 0 free for
+	//               this, and a consumer needing one root per document (duckent's tree contract) should prepend the row
+	//               rather than renumber levels, since renumbering turns every top-level block into a root.
+	//               DELIBERATELY NOT a version bump: this is recorded here rather than
+	//               as 1.5 because the fleet had just finished moving to 1.4 and the
+	//               cost of another re-vendor outweighed the signal (Teague, "add it to
+	//               1.4, we don't need to churn versions any more"). The consequence,
+	//               stated plainly: two builds can both say SPEC_VERSION 1.4 and differ
+	//               on whether they accept a level-0 root, and a consumer cannot tell
+	//               them apart from the version alone. A consumer that needs to know
+	//               tests for TYPE_DOCUMENT's presence in its vendored copy.
+	//               PREDICATE_REVISION stays 1.3: no predicate's answer changes, because
+	//               no valid document could contain a level-0 row before today. The root
+	//               is an ordinary container block, so IsBody() says true for it exactly
+	//               as it does for `div`, and duck_blocks_body walks through it.
+	//
 	// The rule above is what will be followed from here.
 	static constexpr const char *SPEC_VERSION = "1.4";
 	// The last number of the internal 6.x line that 1.2 replaces. A consumer check
@@ -460,6 +521,18 @@ struct DuckBlockVocabulary {
 	// ========================================================================
 	// Block type names
 	// ========================================================================
+	// The document itself, as an OPTIONAL explicit root at level 0 -- the one element
+	// allowed shallower than the top level. A relation may carry SEVERAL, one per
+	// document (a block list can hold many documents; that is what the filename
+	// provenance field is for), and each root opens the next, so such a row is legal
+	// wherever it appears. Everything else still starts at 1, so a document without a
+	// root is unchanged and equally valid. It exists because a consumer whose contract is "these
+	// rows are one tree" needs a single root to point at, and prepending one is cheaper
+	// and safer than renumbering every level (a renumber makes every top-level block a
+	// root, which is a different document). NOT to be confused with ROLE_DOCUMENT below,
+	// which is an attributes['role'] value on a `metadata` blob saying the blob IS the
+	// whole document; this is a block element_type.
+	static constexpr const char *TYPE_DOCUMENT = "document";
 	static constexpr const char *TYPE_HEADING = "heading";
 	static constexpr const char *TYPE_PARAGRAPH = "paragraph";
 	// A block-level text run with NO paragraph semantics -- Pandoc's `Plain`, and
@@ -633,6 +706,29 @@ struct DuckBlockVocabulary {
 	// `metadata`+role over minting a `frontmatter` type in the first place: if the ROLE
 	// carries the meaning, the role needs the enforcement the type has.
 	// ========================================================================
+	// THE DOCUMENT FRAGMENT LOCATOR. Teague's ruling, 2026-10-02. `id` locates a fragment
+	// WITHIN a document, exactly as an HTML fragment anchor does, and it may be either
+	// MINTED by the reader or PROVIDED by the source -- both are `id`, because what the
+	// field means is "how you address this fragment", not where the string came from.
+	// A minted id must be:
+	//   UNIQUE within its document;
+	//   PROGRAMMATICALLY and DETERMINISTICALLY created, so a re-read of the same source
+	//     yields the same id and a diff of two reads shows real changes only;
+	//   SEMANTIC in location and value -- it says where the fragment is and what it is,
+	//     rather than being an opaque counter.
+	// It is load-bearing from spec 1.4: a note ANCHOR carries it and the body sits at
+	// document level bearing the matching id (see "A note's body is a definition" in the
+	// spec). Five element types are documented as carrying it -- div, section, figure,
+	// span, note.
+	static constexpr const char *ATTR_ID = "id";
+	// What the SOURCE called this thing, which is a different question from how to
+	// address it. mediawiki's `<ref name="a">` supplies one; docx, odt, latex and rst do
+	// not. Kept because pandoc DISCARDS it, and without it a consumer cannot join a reuse
+	// back to its definition (panduck's mediawiki_reader.cpp argues the case). Where no
+	// `id` is supplied, a `name` may serve as the id, or the id may be computed from it --
+	// so `name` is provenance and `id` is the address, and the two coincide often enough
+	// that conflating them looks harmless until a source names something twice.
+	static constexpr const char *ATTR_NAME = "name";
 	static constexpr const char *ATTR_ROLE = "role";
 	static constexpr const char *ATTR_KEY = "key";
 	static constexpr const char *ATTR_HEADING_LEVEL = "heading_level";
@@ -716,3 +812,4 @@ struct DuckBlockVocabulary {
 };
 
 } // namespace duckdb
+// clang-format on

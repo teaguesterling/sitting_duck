@@ -89,7 +89,15 @@ CREATE OR REPLACE MACRO duck_block_is_valid(elem) AS (
     AND elem.element_type IS NOT NULL
     AND list_contains(duck_block_declared_encodings(), elem.encoding)
     AND elem.level IS NOT NULL
-    AND elem.level >= 1
+    -- LEVEL 0 IS THE EXPLICIT DOCUMENT ROOT, and nothing else may sit there. Mirrors
+    -- src/validation.cpp's `is_document_root`: the extension has accepted this shape
+    -- since the 1.4 amendment of 2026-09-16, and these macros refused it, so the two
+    -- encodings of one rule disagreed. A negative level is still refused, because
+    -- neither arm below admits one.
+    AND (
+        elem.level >= 1
+        OR (elem.level = 0 AND elem.kind = 'block' AND elem.element_type = 'document')
+    )
     AND elem.element_order IS NOT NULL
     AND elem.element_order >= 0
 );
@@ -111,7 +119,8 @@ CREATE OR REPLACE MACRO duck_block_is_valid(elem) AS (
 CREATE OR REPLACE MACRO duck_block_declared_types() AS (
     [
         'blockquote', 'blocks', 'bold', 'bool', 'caption', 'cite', 'code', 'deflist',
-        'div', 'figure', 'generic', 'heading', 'hr', 'image', 'inlines', 'italic',
+        'div', 'document', 'figure', 'generic', 'heading', 'hr', 'image', 'inlines',
+        'italic',
         'lineblock', 'linebreak', 'link', 'list', 'list_item', 'map', 'math', 'metadata',
         'note', 'page_break', 'paragraph', 'plain', 'quoted', 'raw', 'section',
         'smallcaps', 'softbreak', 'space', 'span', 'strikethrough', 'string', 'subscript',
