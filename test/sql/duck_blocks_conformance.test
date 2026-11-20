@@ -6,8 +6,12 @@
 # Runs the duck_block_utils conformance validator over real ast_to_blocks output,
 # so producer/spec drift is caught (tracker/bugs/014). The macros below are copied
 # VERBATIM from third_party/duck_block_utils/duck_block_conformance.sql
-# (SPEC_VERSION 1.3, upstream 079123d) — resync BOTH together when the vendored copy
-# is bumped. See third_party/duck_block_utils/PROVENANCE.md.
+# (SPEC_VERSION 1.4, upstream c978e07 = v4.2.0) — resync BOTH together when the
+# vendored copy is bumped. See third_party/duck_block_utils/PROVENANCE.md.
+#
+# v4.2.0 (upstream 332353b): duck_block_is_valid admits level 0 for the explicit
+# document root (kind 'block', element_type 'document') and nothing else. ast_to_blocks
+# emits no such root, and the level >= 1 assertion below still pins that directly.
 #
 # 1.3 is additive and validator-unchanged: it adds the IsBody(kind, element_type)
 # predicate (a CONSUMER concern — metadata is never body). ast_to_blocks is a
@@ -35,7 +39,10 @@ CREATE OR REPLACE MACRO duck_block_is_valid(elem) AS (
     AND elem.element_type IS NOT NULL
     AND list_contains(duck_block_declared_encodings(), elem.encoding)
     AND elem.level IS NOT NULL
-    AND elem.level >= 1
+    AND (
+        elem.level >= 1
+        OR (elem.level = 0 AND elem.kind = 'block' AND elem.element_type = 'document')
+    )
     AND elem.element_order IS NOT NULL
     AND elem.element_order >= 0
 );
