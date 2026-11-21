@@ -3,10 +3,14 @@
 These files are a **vendored copy** — do not edit here; re-sync from upstream.
 
 - **Source repo:** teaguesterling/duckdb_duck_block_utils
-- **Commit:** `079123d` (main, PR #32, 2026-09-11)
-- **SPEC_VERSION:** `1.3` (public; supersedes the retired internal `6.6` line — see the
+- **Commit:** `c978e07` (tag `v4.2.0`, 2026-11-20). Both files are taken from this
+  commit with `git show <sha>:<path>`. Until this sync, this field still said `079123d`
+  (1.3), although the vocabulary header was at `95a84e6` (1.4) and the conformance SQL
+  was byte-identical to `1c5f2a6`.
+- **SPEC_VERSION:** `1.4` (public; supersedes the retired internal `6.6` line — see the
   "TWO NUMBER LINES" note in `duck_block_vocabulary.hpp`. sitting_duck previously
-  vendored `1.2` = commit `1c5f2a6`, and before that `6.5` = public `1.1`.)
+  vendored `1.3` = commit `079123d`, `1.2` = commit `1c5f2a6`, and before that `6.5` =
+  public `1.1`.)
 - **Files:** `duck_block_vocabulary.hpp` (type/encoding vocabulary + SPEC_VERSION +
   `ImplicitParentOf`/`RequiresAncestor`; from upstream `src/include/`),
   `duck_block_conformance.sql` (`duck_blocks_validate()` + list-level rules; from
@@ -15,6 +19,15 @@ These files are a **vendored copy** — do not edit here; re-sync from upstream.
 sitting_duck's `ast_to_blocks` emits duck_blocks conforming to this version; the
 conformance test in `test/sql/duck_blocks_conformance.test` runs the validator here
 over real `ast_to_blocks` output so producer/spec drift is caught (see tracker/bugs/014).
+
+**v4.2.0 note (still SPEC_VERSION 1.4):** the conformance SQL changes behaviour once
+(upstream `332353b`, #62). `duck_block_is_valid` now admits `level = 0` for
+`kind = 'block' AND element_type = 'document'`, the optional explicit document root of
+the 1.4 amendment. `'document'` joins `duck_block_declared_types()`. Every other
+element still needs `level >= 1`. The vocabulary header gains `TYPE_DOCUMENT` (#41),
+`ATTR_ID`/`ATTR_NAME` (#56), the multi-root rule (#42) and a `clang-format off` marker above
+`#pragma once` (#48). sitting_duck compiles nothing from this header, so it changes no
+build output.
 
 **1.3 note (PR #32):** additive over 1.2 — one new predicate, `struct shape and
 validator unchanged`. `IsBody(kind, element_type)` names the document BODY as
