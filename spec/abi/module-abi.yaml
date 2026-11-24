@@ -308,8 +308,6 @@ native_extraction:
   # "feature_name". Fixing them is #042's own work, one language per change,
   # expectation first. This records the ground truth; it does not excuse it.
   dead_dispatch:
-    - {check: dispatch, language: cpp, literal: "class_definition"}   # cpp_adapter.cpp:230
-    - {check: dispatch, language: cpp, literal: "function_specifier"}   # cpp_native_extractors.hpp:754
     - {check: dispatch, language: cpp, literal: "pointer_type"}   # cpp_native_extractors.hpp:544
     - {check: dispatch, language: cpp, literal: "reference_type"}   # cpp_native_extractors.hpp:544
     - {check: dispatch, language: csharp, literal: "base_type"}   # csharp_native_extractors.hpp:255

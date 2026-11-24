@@ -227,7 +227,7 @@ bool CPPAdapter::IsPublicNode(TSNode node, const string &content) const {
 	string node_type = string(node_type_str);
 
 	// Functions and classes at namespace/global scope are generally public
-	if (node_type == "function_definition" || node_type == "function_declarator" || node_type == "class_definition") {
+	if (node_type == "function_definition" || node_type == "function_declarator") {
 		// Check if it's in a namespace (likely public API)
 		TSNode parent = ts_node_parent(node);
 		while (!ts_node_is_null(parent)) {
