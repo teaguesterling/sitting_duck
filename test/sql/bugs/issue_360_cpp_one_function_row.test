@@ -177,8 +177,10 @@ WHERE c.type = 'function_declarator' AND is_constituent(c.flags)
 ----
 0
 
-# Each function_definition has exactly one constituent declarator: the number
-# of `.function` rows equals definitions plus prototypes, with no pair left.
+# Every function_definition has at least one constituent declarator, so no
+# definition is left paired with an unmarked one. Not "exactly one": a function
+# that returns a function pointer has two (see fp_src above), and both are
+# constituents.
 query I
 SELECT count(*) FROM (
     SELECT d.file_path, d.node_id, count(c.node_id) AS n
@@ -192,6 +194,6 @@ SELECT count(*) FROM (
                        AND c.node_id > m.node_id AND c.node_id <= m.node_id + m.descendant_count)
     WHERE d.type = 'function_definition'
     GROUP BY d.file_path, d.node_id) t
-WHERE n != 1;
+WHERE n = 0;
 ----
 0
