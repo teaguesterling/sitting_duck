@@ -862,14 +862,17 @@ public:
 				return ExtractTypeFromAnnotation(parent, content);
 			} else if (parent_type == "property_signature") {
 				return ExtractPropertySignatureType(parent, content);
-			} else if (parent_type == "parameter") {
-				// Check if this is a typed parameter
-				uint32_t parent_count = ts_node_child_count(parent);
-				for (uint32_t i = 0; i < parent_count; i++) {
-					TSNode child = ts_node_child(parent, i);
-					if (strcmp(ts_node_type(child), "type_annotation") == 0) {
-						return ExtractTypeFromAnnotation(child, content);
-					}
+			} else if (parent_type == "required_parameter" || parent_type == "optional_parameter") {
+				// The grammar has no `parameter` node. Only the parameter's NAME
+				// (its `pattern` or `name` field) takes the declared type: an
+				// identifier in the `value` field is a default, not of that type.
+				TSNode pattern = ts_node_child_by_field_name(parent, "pattern", strlen("pattern"));
+				TSNode name = ts_node_child_by_field_name(parent, "name", strlen("name"));
+				bool is_name = (!ts_node_is_null(pattern) && ts_node_eq(pattern, node)) ||
+				               (!ts_node_is_null(name) && ts_node_eq(name, node));
+				TSNode annotation = ts_node_child_by_field_name(parent, "type", strlen("type"));
+				if (is_name && !ts_node_is_null(annotation)) {
+					return ExtractTypeFromAnnotation(annotation, content);
 				}
 			}
 		}
