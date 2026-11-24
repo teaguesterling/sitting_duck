@@ -1,0 +1,26 @@
+# name: test/sql/bugs/dead_dispatch_css_custom_property.test
+# description: a css custom property (--name) reports CUSTOM_PROPERTY, not PROPERTY
+# group: [bugs]
+
+# Change 8 of tracker/roadmap/dead-dispatch-plan.md. The css VARIABLE_WITH_TYPE
+# extractor gave CUSTOM_PROPERTY / [CSS_VARIABLE] to a `variable_name` node,
+# which tree-sitter-css never emits. It is in the spec/abi/module-abi.yaml
+# `dead_dispatch:` baseline.
+#
+# Measured on build 6c971a037f: a custom property is a plain property_name whose
+# text starts with `--`, so `--main: red` reported PROPERTY like `color`:
+#
+#     declaration
+#       property_name(--main)   -> PROPERTY, []
+#       plain_value(red)
+
+require sitting_duck
+
+query III
+SELECT name, signature_type, modifiers
+FROM parse_ast(':root { --main: red; color: var(--main); }', 'css', context := 'native')
+WHERE type = 'property_name'
+ORDER BY node_id;
+----
+--main	CUSTOM_PROPERTY	[CSS_VARIABLE]
+color	PROPERTY	[COLOR_PROPERTY]

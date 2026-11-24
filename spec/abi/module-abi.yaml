@@ -310,15 +310,13 @@ native_extraction:
   dead_dispatch:
     - {check: dispatch, language: c, literal: "function_specifier"}   # c_native_extractors.hpp:227
     - {check: dispatch, language: cpp, literal: "class_definition"}   # cpp_adapter.cpp:230
-    - {check: dispatch, language: cpp, literal: "function_specifier"}   # cpp_native_extractors.hpp:738
-    - {check: dispatch, language: cpp, literal: "pointer_type"}   # cpp_native_extractors.hpp:528
-    - {check: dispatch, language: cpp, literal: "reference_type"}   # cpp_native_extractors.hpp:528
+    - {check: dispatch, language: cpp, literal: "function_specifier"}   # cpp_native_extractors.hpp:754
+    - {check: dispatch, language: cpp, literal: "pointer_type"}   # cpp_native_extractors.hpp:544
+    - {check: dispatch, language: cpp, literal: "reference_type"}   # cpp_native_extractors.hpp:544
     - {check: dispatch, language: csharp, literal: "base_type"}   # csharp_native_extractors.hpp:255
     - {check: dispatch, language: csharp, literal: "equals_value_clause"}   # csharp_native_extractors.hpp:119
     - {check: dispatch, language: csharp, literal: "parameter_modifier"}   # csharp_native_extractors.hpp:116
     - {check: dispatch, language: csharp, literal: "simple_base_type"}   # csharp_native_extractors.hpp:255
-    - {check: dispatch, language: css, literal: "media_feature_name"}   # css_native_extractors.hpp:169
-    - {check: dispatch, language: css, literal: "variable_name"}   # css_native_extractors.hpp:382
     - {check: dispatch, language: go, literal: "primitive_type"}   # go_native_extractors.hpp:63
     - {check: dispatch, language: java, literal: "primitive_type"}   # java_native_extractors.hpp:16
     - {check: dispatch, language: kotlin, literal: "default_value"}   # kotlin_native_extractors.hpp:191
