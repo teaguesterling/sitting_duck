@@ -316,14 +316,13 @@ native_extraction:
     - {check: dispatch, language: css, literal: "variable_name"}   # css_native_extractors.hpp:382
     - {check: dispatch, language: kotlin, literal: "default_value"}   # kotlin_native_extractors.hpp:191
     - {check: dispatch, language: lua, literal: "local_function"}   # lua_adapter.cpp:163
-    - {check: dispatch, language: lua, literal: "local_function_declaration"}   # lua_adapter.cpp:68
     - {check: dispatch, language: lua, literal: "local_variable_declaration"}   # lua_adapter.cpp:163
     - {check: dispatch, language: markdown, literal: "image"}   # markdown_adapter.cpp:68
     - {check: dispatch, language: markdown, literal: "link"}   # markdown_adapter.cpp:68
     - {check: dispatch, language: php, literal: "optional_parameter"}   # php_native_extractors.hpp:102
     - {check: dispatch, language: php, literal: "return_type"}   # php_native_extractors.hpp:51
     - {check: dispatch, language: php, literal: "type_declaration"}   # php_native_extractors.hpp:139
-    - {check: dispatch, language: python, literal: "import_list"}   # python_native_extractors.hpp:1374
+    - {check: dispatch, language: python, literal: "import_list"}   # python_native_extractors.hpp:1373
     - {check: dispatch, language: sql, literal: "AND"}   # sql_native_extractors.hpp:529
     - {check: dispatch, language: sql, literal: "OR"}   # sql_native_extractors.hpp:529
     - {check: dispatch, language: sql, literal: "boolean_literal"}   # sql_native_extractors.hpp:703

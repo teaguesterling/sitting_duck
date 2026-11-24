@@ -65,7 +65,7 @@ string LuaAdapter::ExtractNodeName(TSNode node, const string &content) const {
 			string node_type = string(node_type_str);
 
 			// For function declarations, look for the function name
-			if (node_type == "function_declaration" || node_type == "local_function_declaration") {
+			if (node_type == "function_declaration") {
 				// In Lua, function name can be simple identifier or dot/colon index expression
 				// function foo() -> identifier "foo"
 				// function M.foo() -> dot_index_expression
