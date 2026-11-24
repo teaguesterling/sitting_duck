@@ -177,8 +177,8 @@ static const std::unordered_map<string, FunctionCallNodeTypes> LANGUAGE_FUNCTION
          "argument_list",
          {"identifier", "constant", "scope_resolution"},
          {",", "(", ")", ";"},
-         {"method_call", "chained_call"}, // Additional call types for Ruby
-         {"pair", "keyword_parameter"}    // Named parameter types for Ruby (keyword arguments)
+         {},                           // A method call or a chained call is a plain `call` in tree-sitter-ruby
+         {"pair", "keyword_parameter"} // Named parameter types for Ruby (keyword arguments)
      }},
     {"swift",
      {
