@@ -74,7 +74,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       # What this repo pins, ships, and tests against.
-      DUCKDB_VERSION: v2.0.0
+      DUCKDB_VERSION: v2.0.1
       # The next line this workflow builds, for compile-compat and for the
       # test-coverage leg. BRANCH name, not the registry's commit -- see
       # duckdb-v2-test-coverage below for why that distinction is load-bearing.
@@ -91,8 +91,8 @@ jobs:
       # as a live value. A grep cannot tell a comment from a setting, so the
       # parse below strips comment lines first and asserts the ABSENCE of a tag
       # default rather than recording one.
-      DUCKDB_REGISTRY_STABLE: v2.0.0
-      DUCKDB_REGISTRY_COMMIT: d54cbbe3df17e8e5ce68312f483b4155836112aa
+      DUCKDB_REGISTRY_STABLE: v2.0.1
+      DUCKDB_REGISTRY_COMMIT: 8d78114e90a53823803660bf821f6073ac87da8c
       DUCKDB_REGISTRY_TOOLS: v2.0-cyanoptera
       # scripts/build.py still routes a v1.5.6 build to each descriptor's
       # `variegata` ref -- the line this repo ships. But NOTHING in the
@@ -530,7 +530,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GEN: ninja
-      OVERRIDE_GIT_DESCRIBE: v2.0.0
+      OVERRIDE_GIT_DESCRIBE: v2.0.1
       EXT_FLAGS: -DSITTING_DUCK_LANGUAGES="python;cpp"
     steps:
       - uses: actions/checkout@v4
@@ -569,7 +569,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GEN: ninja
-      OVERRIDE_GIT_DESCRIBE: v2.0.0
+      OVERRIDE_GIT_DESCRIBE: v2.0.1
     steps:
       - uses: actions/checkout@v4
       - name: Checkout required submodules
@@ -596,7 +596,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GEN: ninja
-      OVERRIDE_GIT_DESCRIBE: v2.0.0
+      OVERRIDE_GIT_DESCRIBE: v2.0.1
     steps:
       - uses: actions/checkout@v4
       - name: Checkout required submodules
@@ -729,7 +729,7 @@ jobs:
       #
       # The pin job permits this literal because it equals
       # DUCKDB_REGISTRY_STABLE, and still finds DUCKDB_NEXT on duckdb-next-build.
-      duckdb_version: v2.0.0
+      duckdb_version: v2.0.1
       ci_tools_version: main
       extension_name: sitting_duck
       # Deliberately NO skip_tests: running the tests is the entire point.
@@ -751,7 +751,7 @@ jobs:
     name: Build extension binaries
     uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@v2.0-cyanoptera
     with:
-      duckdb_version: v2.0.0
+      duckdb_version: v2.0.1
       ci_tools_version: v2.0-cyanoptera
       extension_name: sitting_duck
       # Windows was excluded here from the v1.5.4 era, on the grounds that both
