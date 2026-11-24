@@ -655,6 +655,12 @@ CREATE OR REPLACE MACRO ast_definitions_from(ast_table) AS TABLE
               -- NULL there must empty the answer, not default every row to
               -- 'variable'. Without this the role test (TRUE OR NULL) passes.
               AND a.semantic_type IS NOT NULL
+              -- #360: a constituent definition is part of a larger one, such
+              -- as the function_declarator of a C++ function_definition. The
+              -- definition is the row. Narrowed to definition KINDS on
+              -- purpose: python's aliased_import is a constituent with a
+              -- NAME_DEFINITION role, and it is the binding of its alias.
+              AND NOT (is_constituent(a.flags) AND is_definition(a.semantic_type))
               AND (is_name_definition(a.flags)
                    OR is_name_declaration(a.flags)
                    OR (NOT is_name_reference(a.flags)
@@ -802,6 +808,9 @@ CREATE OR REPLACE MACRO ast_containing_line(source, line_num, language := NULL) 
     SELECT * FROM ast_containing_line_from('__ast_containing_line_src', line_num);
 
 -- For an AST table you already parsed. `ast_table` is a table NAME (a string),
+
+)SQLMACRO"
+        R"SQLMACRO(
 -- resolved with query_table(): parse once with read_ast, query many times.
 -- There is no `language` parameter, because a parsed table carries its own.
 -- Usage:
@@ -811,9 +820,6 @@ CREATE OR REPLACE MACRO ast_containing_line(source, line_num, language := NULL) 
 -- Reads start_line and end_line. A table whose line columns are NULL returns no
 -- rows rather than raising -- the same NULL-definite convention as
 -- ast_definitions_from above.
-
-)SQLMACRO"
-        R"SQLMACRO(
 -- ----------------------------------------------------------------------------
 -- ast_in_range_from: Nodes of a parsed AST table whose source span falls inside a line range
 -- ----------------------------------------------------------------------------
@@ -6705,6 +6711,10 @@ CREATE OR REPLACE MACRO ast_to_blocks_from(
             FROM ast a
             WHERE is_definition(a.semantic_type)
               AND is_construct(a.flags)
+              -- #360: a constituent is part of a larger definition, such as
+              -- the function_declarator of a C++ function_definition. As a
+              -- heading it repeated the definition's heading.
+              AND NOT is_constituent(a.flags)
               AND a.name IS NOT NULL AND a.name != ''
               AND a.parent_id IS NOT NULL
               AND NOT (is_variable_definition(a.semantic_type)
@@ -6785,6 +6795,9 @@ CREATE OR REPLACE MACRO ast_to_blocks_from(
             LEFT JOIN roots r ON r.file_path = d.file_path
         ),
         elements AS (
+
+)SQLMACRO"
+        R"SQLMACRO(
             -- One metadata block per file (before any definition: sort_node -1).
             SELECT
                 f.file_path,
@@ -6792,9 +6805,6 @@ CREATE OR REPLACE MACRO ast_to_blocks_from(
                 0 AS sort_part,
                 'metadata' AS element_type,
                 'file_path: ' || f.file_path || chr(10) ||
-
-)SQLMACRO"
-        R"SQLMACRO(
                 'language: ' || coalesce(f.language, 'unknown') || chr(10) ||
                 'definitions: ' || (SELECT count(*) FROM defs d
                                     WHERE d.file_path = f.file_path)::VARCHAR || chr(10) ||

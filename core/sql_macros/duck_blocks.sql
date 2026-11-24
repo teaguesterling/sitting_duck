@@ -161,6 +161,10 @@ CREATE OR REPLACE MACRO ast_to_blocks_from(
             FROM ast a
             WHERE is_definition(a.semantic_type)
               AND is_construct(a.flags)
+              -- #360: a constituent is part of a larger definition, such as
+              -- the function_declarator of a C++ function_definition. As a
+              -- heading it repeated the definition's heading.
+              AND NOT is_constituent(a.flags)
               AND a.name IS NOT NULL AND a.name != ''
               AND a.parent_id IS NOT NULL
               AND NOT (is_variable_definition(a.semantic_type)
