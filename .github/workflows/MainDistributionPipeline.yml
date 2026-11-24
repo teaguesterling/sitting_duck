@@ -286,8 +286,15 @@ jobs:
             registry="${reg_stable}/${reg_default}/${reg_commit}/${reg_tools}"
             recorded="${DUCKDB_REGISTRY_STABLE}/${DUCKDB_REGISTRY_STABLE}/${DUCKDB_REGISTRY_COMMIT}/${DUCKDB_REGISTRY_TOOLS}"
             if [ "$registry" != "$recorded" ]; then
-              echo "::error::the community registry now builds stable/default/commit/ci-tools ${registry} (at ${sha:-main}) but this workflow records ${recorded}; update the DUCKDB_REGISTRY_* constants, and reconsider tracker/features/051 -- the registry has moved again"
-              echo "duckdb-pin: FAILED, registry ${registry} vs recorded ${recorded}" >> "$summary"; exit 1
+              # On a pull_request the registry moving is not this PR's fault, so it warns;
+              # a push to main still fails. The pin-equals-tag checks above stay hard. (Teague, 2026-11-24)
+              if [ "${GITHUB_EVENT_NAME}" = "pull_request" ]; then
+                echo "::warning::the community registry now builds stable/default/commit/ci-tools ${registry} (at ${sha:-main}) but this workflow records ${recorded}; update the DUCKDB_REGISTRY_* constants, and reconsider tracker/features/051 -- the registry has moved again (pull_request: a warning only, because the registry moves outside this PR; a push to main still fails)"
+                echo "duckdb-pin: WARNING (pull_request), registry ${registry} vs recorded ${recorded}" >> "$summary"; exit 0
+              else
+                echo "::error::the community registry now builds stable/default/commit/ci-tools ${registry} (at ${sha:-main}) but this workflow records ${recorded}; update the DUCKDB_REGISTRY_* constants, and reconsider tracker/features/051 -- the registry has moved again"
+                echo "duckdb-pin: FAILED, registry ${registry} vs recorded ${recorded}" >> "$summary"; exit 1
+              fi
             fi
             # Informational, not a gate: is the registry's pinned commit actually
             # the release it names? A registry that pins a post-release commit is a
