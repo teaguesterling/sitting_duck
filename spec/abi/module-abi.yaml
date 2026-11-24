@@ -356,7 +356,6 @@ native_extraction:
     - {check: table, language: r, literal: ";"}   # function_call_extractor.hpp:214
     - {check: table, language: r, literal: "namespace_get"}   # function_call_extractor.hpp:213
     - {check: table, language: r, literal: "namespace_get_internal"}   # function_call_extractor.hpp:213
-    - {check: table, language: rust, literal: "method_call_expression"}   # function_call_extractor.hpp:132
     - {check: table, language: swift, literal: "init_expression"}   # function_call_extractor.hpp:186
     - {check: table, language: swift, literal: "labeled_argument"}   # function_call_extractor.hpp:204
 

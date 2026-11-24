@@ -129,8 +129,8 @@ static const std::unordered_map<string, FunctionCallNodeTypes> LANGUAGE_FUNCTION
          "field_initializer_list",
          {"identifier", "scoped_identifier", "field_identifier", "field_expression"},
          {",", "(", ")", ";", "{", "}", "!"},
-         {"method_call_expression", "macro_invocation"}, // Additional call types for Rust
-         {}                                              // No named parameter types for Rust (uses struct syntax)
+         {"macro_invocation"}, // A method call is a call_expression over a field_expression
+         {}                    // No named parameter types for Rust (uses struct syntax)
      }},
     {"java",
      {
