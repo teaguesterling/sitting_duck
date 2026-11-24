@@ -105,6 +105,27 @@ WHERE type = 'function_definition' ORDER BY node_id;
 7	[x]
 8	[a, b]
 
+# A function that returns a function pointer has TWO function_declarators on
+# its declarator path: the inner one holds `fp(int a)`, the outer one the
+# `(char)` of the pointer it returns. Neither is a second function, so both
+# are constituents and `.function` keeps the definition alone. (Before, the
+# outer one was a third, unnamed function row.)
+statement ok
+CREATE TABLE fp_src AS SELECT * FROM parse_ast('int (*fp(int a))(char) { return 0; }', 'cpp');
+
+query TI
+SELECT type, is_constituent(flags) FROM fp_src
+WHERE type IN ('function_declarator', 'function_definition') ORDER BY node_id;
+----
+function_definition	false
+function_declarator	true
+function_declarator	true
+
+query T
+SELECT type FROM ast_select_from('fp_src', '.function') ORDER BY node_id;
+----
+function_definition
+
 # --- unchanged by decision -----------------------------------------------------
 # A bare attribute selector is a per-node filter, as [name=x] is: it still
 # returns the declarator and the parameter_list. `.function[params=1]` is the
