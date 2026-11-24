@@ -1,0 +1,69 @@
+# name: test/sql/bugs/dead_dispatch_ts_parameter_identifier.test
+# description: a typescript parameter's name identifier reports the parameter's declared type
+# group: [bugs]
+
+# Change 2 of tracker/roadmap/dead-dispatch-plan.md. ExtractIdentifierType in
+# typescript_native_extractors.hpp types an identifier from its parent. For a
+# parameter it dispatched on the parent type `parameter`, which the grammar
+# never emits; it is in the spec/abi/module-abi.yaml `dead_dispatch:` baseline.
+#
+# Measured on build 7ad56b6716: tree-sitter-typescript wraps each parameter in
+# `required_parameter` or `optional_parameter`. The name is the `pattern` field,
+# the annotation is the `type` field, and a default is the `value` field.
+#
+#     function g(a: string, d: Foo = x) {}
+#
+#     required_parameter          required_parameter
+#       pattern: identifier(a)      pattern: identifier(d)
+#       type: type_annotation       type: type_annotation
+#                                   value: identifier(x)
+#
+# So every parameter name reported signature_type 'identifier', while a
+# `let x: number` name reports 'number'.
+
+require sitting_duck
+
+# The name of a typed parameter, required or optional, reports its type.
+# An untyped parameter keeps the fallback, as an untyped `let` does.
+query II
+SELECT name, signature_type
+FROM parse_ast('function g(a: string, b?: number, c) {}', 'typescript', context := 'native')
+WHERE type = 'identifier' AND name IN ('a', 'b', 'c')
+ORDER BY node_id;
+----
+a	string
+b	number
+c	identifier
+
+# Only the NAME takes the parameter's type. The default value `x` is an
+# identifier under the same required_parameter; it is not of type Foo.
+query II
+SELECT name, signature_type
+FROM parse_ast('function g(d: Foo = x) {}', 'typescript', context := 'native')
+WHERE type = 'identifier'
+ORDER BY node_id;
+----
+g	identifier
+d	Foo
+x	identifier
+
+# A constructor parameter property, with an accessibility modifier, is the
+# same required_parameter / optional_parameter shape.
+query II
+SELECT name, signature_type
+FROM parse_ast('class K { constructor(private p: number, public readonly q?: string) {} }', 'typescript', context := 'native')
+WHERE type = 'identifier' AND name IN ('p', 'q')
+ORDER BY node_id;
+----
+p	number
+q	string
+
+# The parameter nodes themselves were already right; the fix must not move them.
+query II
+SELECT name, signature_type
+FROM parse_ast('function g(a: string, b?: number) {}', 'typescript', context := 'native')
+WHERE type IN ('required_parameter', 'optional_parameter')
+ORDER BY node_id;
+----
+a	string
+b	number
