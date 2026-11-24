@@ -48,7 +48,7 @@ public:
 			TSNode child = ts_node_child(node, i);
 			const char *child_type = ts_node_type(child);
 
-			if (strcmp(child_type, "type") == 0 || strcmp(child_type, "nullable_type") == 0 ||
+			if (strcmp(child_type, "nullable_type") == 0 ||
 			    strcmp(child_type, "user_type") == 0 || strcmp(child_type, "function_type") == 0) {
 				uint32_t start = ts_node_start_byte(child);
 				uint32_t end = ts_node_end_byte(child);
@@ -180,7 +180,7 @@ public:
 				if (start < content.length() && end <= content.length()) {
 					param.name = content.substr(start, end - start);
 				}
-			} else if (strcmp(child_type, "type") == 0 || strcmp(child_type, "nullable_type") == 0 ||
+			} else if (strcmp(child_type, "nullable_type") == 0 ||
 			           strcmp(child_type, "user_type") == 0) {
 				// Parameter type
 				uint32_t start = ts_node_start_byte(child);
@@ -386,7 +386,7 @@ public:
 				if (param.name.empty()) {
 					param.name = ExtractNodeText(child, content);
 				}
-			} else if (strcmp(child_type, "type") == 0 || strcmp(child_type, "nullable_type") == 0 ||
+			} else if (strcmp(child_type, "nullable_type") == 0 ||
 			           strcmp(child_type, "user_type") == 0 || strcmp(child_type, "function_type") == 0) {
 				param.type = ExtractNodeText(child, content);
 			}
@@ -486,14 +486,18 @@ struct KotlinNativeExtractor<NativeExtractionStrategy::CLASS_WITH_METHODS> {
 		const char *node_type = ts_node_type(node);
 		bool has_extends = false;
 
+		// tree-sitter-kotlin emits interfaces and enum classes as
+		// class_declaration too; the kind is a keyword child (#323).
 		if (strcmp(node_type, "class_declaration") == 0) {
-			context.signature_type = ExtractClassType(node, content);
-		} else if (strcmp(node_type, "interface_declaration") == 0) {
-			context.signature_type = "interface";
+			if (HasChildOfType(node, "interface")) {
+				context.signature_type = "interface";
+			} else if (HasChildOfType(node, "enum")) {
+				context.signature_type = "enum";
+			} else {
+				context.signature_type = ExtractClassType(node, content);
+			}
 		} else if (strcmp(node_type, "object_declaration") == 0) {
 			context.signature_type = "object";
-		} else if (strcmp(node_type, "enum_class_declaration") == 0) {
-			context.signature_type = "enum";
 		} else {
 			context.signature_type = "type";
 		}
@@ -506,6 +510,16 @@ struct KotlinNativeExtractor<NativeExtractionStrategy::CLASS_WITH_METHODS> {
 	}
 
 public:
+	static bool HasChildOfType(TSNode node, const char *type) {
+		uint32_t child_count = ts_node_child_count(node);
+		for (uint32_t i = 0; i < child_count; i++) {
+			if (strcmp(ts_node_type(ts_node_child(node, i)), type) == 0) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	static string ExtractClassType(TSNode node, const string &content) {
 		// Check for data class, sealed class, abstract class, etc.
 		uint32_t child_count = ts_node_child_count(node);
@@ -713,7 +727,7 @@ public:
 			TSNode child = ts_node_child(node, i);
 			const char *child_type = ts_node_type(child);
 
-			if (strcmp(child_type, "type") == 0 || strcmp(child_type, "nullable_type") == 0 ||
+			if (strcmp(child_type, "nullable_type") == 0 ||
 			    strcmp(child_type, "user_type") == 0) {
 				uint32_t start = ts_node_start_byte(child);
 				uint32_t end = ts_node_end_byte(child);

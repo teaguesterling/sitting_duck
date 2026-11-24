@@ -1,0 +1,67 @@
+# name: test/sql/bugs/323_kotlin_class_kinds.test
+# description: kotlin interfaces and enum classes report their own kind, not 'class'
+# group: [bugs]
+
+# The kind half of the #323 family. 323_kotlin_parent_types.test pins the
+# parent half, fixed in 7e74ca4. This file pins what that fix left behind.
+#
+# CLASS_WITH_METHODS in kotlin_native_extractors.hpp dispatched on two node
+# types the grammar never emits, both in the spec/abi/module-abi.yaml
+# `dead_dispatch:` baseline:
+#
+#     interface_declaration    ABSENT
+#     enum_class_declaration   ABSENT
+#
+# Measured on build 94af4e6588: tree-sitter-kotlin emits an interface and an
+# enum class as a plain `class_declaration`. The kind is a KEYWORD CHILD:
+#
+#     interface I {}           enum class E { A }       class P {}
+#
+#     class_declaration        class_declaration        class_declaration
+#       interface                enum                     class
+#       type_identifier(I)       class                    type_identifier(P)
+#       class_body               type_identifier(E)       class_body
+#                                enum_class_body
+#
+# So every kotlin interface and enum class reported signature_type 'class'.
+# Java, from the same strategy, reports 'interface' / 'enum'.
+
+require sitting_duck
+
+query II
+SELECT name, signature_type
+FROM parse_ast(E'interface I {}\nenum class E { A }\nclass P {}\n', 'kotlin', context := 'native')
+WHERE type = 'class_declaration'
+ORDER BY start_line;
+----
+I	interface
+E	enum
+P	class
+
+# A class modifier still decides the kind of a CLASS. The keyword check must
+# not turn `data class` into plain 'class'.
+query II
+SELECT name, signature_type
+FROM parse_ast(E'data class D(val x: Int)\nsealed class S\n', 'kotlin', context := 'native')
+WHERE type = 'class_declaration'
+ORDER BY start_line;
+----
+D	data_class
+S	sealed_class
+
+# But the keyword outranks a modifier: `sealed interface` is an interface.
+# Before the fix it reported 'sealed_class', because only the modifier was read.
+query II
+SELECT name, signature_type
+FROM parse_ast(E'sealed interface T\n', 'kotlin', context := 'native')
+WHERE type = 'class_declaration';
+----
+T	interface
+
+# `object` is its own node type, and it is live, so it keeps its own kind.
+query II
+SELECT name, signature_type
+FROM parse_ast(E'object O {}\n', 'kotlin', context := 'native')
+WHERE type = 'object_declaration';
+----
+O	object
