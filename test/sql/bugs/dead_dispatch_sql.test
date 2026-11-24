@@ -1,0 +1,84 @@
+# name: test/sql/bugs/dead_dispatch_sql.test
+# description: sql function calls, AND/OR and literal kinds are extracted from the node types the grammar emits
+# group: [bugs]
+
+# Change 4 of tracker/roadmap/dead-dispatch-plan.md. The sql native extractor
+# dispatched on node types that tree-sitter-sql never emits. They are in the
+# spec/abi/module-abi.yaml `dead_dispatch:` baseline:
+#
+#     function_call                                     the grammar emits invocation
+#     AND, OR                                           keyword_and, keyword_or
+#     string_literal, number_literal, boolean_literal   one `literal` for every kind
+#
+# Measured on build 6c971a037f:
+#
+#     upper(a, 1)            invocation              -> signature_type SQL, parameters []
+#       object_reference(upper)  term(a)  term(1)       (no argument-list node)
+#     a = 1 AND b = 2        binary_expression       -> keyword_and listed as an operand,
+#                                                       no LOGICAL modifier
+#     'x'  2  TRUE  NULL     literal (TRUE has a keyword_true child, NULL a keyword_null)
+#                                                    -> every one [GENERIC]
+
+require sitting_duck
+
+# A function call reports FUNCTION and its arguments. The function's own name is
+# not an argument.
+query III
+SELECT name, signature_type, parameters
+FROM parse_ast($$SELECT upper(a, 1), count(*) FROM t$$, 'sql', context := 'native')
+WHERE type = 'invocation'
+ORDER BY node_id;
+----
+upper	FUNCTION	[{'name': a, 'type': ''}, {'name': 1, 'type': ''}]
+count	FUNCTION	[{'name': *, 'type': ''}]
+
+# AND and OR are LOGICAL, and they are operators, not operands.
+query II
+SELECT parameters, modifiers
+FROM parse_ast($$SELECT 1 FROM t WHERE a = 1 AND b = 2$$, 'sql', context := 'native')
+WHERE type = 'binary_expression' AND depth = 4;
+----
+[{'name': 'a = 1', 'type': binary_expression}, {'name': 'b = 2', 'type': binary_expression}]	[LOGICAL]
+
+query II
+SELECT parameters, modifiers
+FROM parse_ast($$SELECT 1 FROM t WHERE a = 1 OR b = 2$$, 'sql', context := 'native')
+WHERE type = 'binary_expression' AND depth = 4;
+----
+[{'name': 'a = 1', 'type': binary_expression}, {'name': 'b = 2', 'type': binary_expression}]	[LOGICAL]
+
+# A comparison is still COMPARISON.
+query I
+SELECT modifiers
+FROM parse_ast($$SELECT 1 FROM t WHERE a = 1$$, 'sql', context := 'native')
+WHERE type = 'binary_expression';
+----
+[COMPARISON]
+
+# Each literal reports its kind. NULL is none of the three, so it stays GENERIC.
+query II
+SELECT name, modifiers
+FROM parse_ast($$SELECT 'x', 2, 1.5, TRUE, FALSE, NULL$$, 'sql', context := 'native')
+WHERE type = 'literal'
+ORDER BY node_id;
+----
+'x'	[STRING]
+2	[NUMBER]
+1.5	[NUMBER]
+TRUE	[BOOLEAN]
+FALSE	[BOOLEAN]
+NULL	[GENERIC]
+
+# A TEXT column reports its type. ExtractColumnType matched a `text` node, which
+# the grammar never emits: TEXT is a bare keyword_text, where INT and VARCHAR
+# are wrapped in int / varchar nodes. Measured on build 6c971a037f: a -> NULL.
+# (The plan had classified `text` as redundant from its other site, where a
+# keyword_ prefix test does catch keyword_text. This site has no such test.)
+query II
+SELECT name, signature_type
+FROM parse_ast($$CREATE TABLE t (a TEXT, b INT)$$, 'sql', context := 'native')
+WHERE type = 'column_definition'
+ORDER BY node_id;
+----
+a	TEXT
+b	INT
