@@ -323,9 +323,7 @@ native_extraction:
     - {check: dispatch, language: php, literal: "optional_parameter"}   # php_native_extractors.hpp:102
     - {check: dispatch, language: php, literal: "return_type"}   # php_native_extractors.hpp:51
     - {check: dispatch, language: php, literal: "type_declaration"}   # php_native_extractors.hpp:139
-    - {check: dispatch, language: python, literal: "annotated_assignment"}   # python_native_extractors.hpp:651
-    - {check: dispatch, language: python, literal: "async_function_definition"}   # python_native_extractors.hpp:1103
-    - {check: dispatch, language: python, literal: "import_list"}   # python_native_extractors.hpp:1429
+    - {check: dispatch, language: python, literal: "import_list"}   # python_native_extractors.hpp:1374
     - {check: dispatch, language: sql, literal: "AND"}   # sql_native_extractors.hpp:529
     - {check: dispatch, language: sql, literal: "OR"}   # sql_native_extractors.hpp:529
     - {check: dispatch, language: sql, literal: "boolean_literal"}   # sql_native_extractors.hpp:703
