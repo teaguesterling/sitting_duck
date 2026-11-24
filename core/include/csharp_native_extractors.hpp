@@ -252,18 +252,6 @@ public:
 					if (strcmp(base_type, "identifier") == 0 || strcmp(base_type, "generic_name") == 0 ||
 					    strcmp(base_type, "qualified_name") == 0) {
 						type_name = ExtractNodeText(base_child, content);
-					} else if (strcmp(base_type, "base_type") == 0 || strcmp(base_type, "simple_base_type") == 0) {
-						// Extract the type from inside
-						uint32_t inner_count = ts_node_child_count(base_child);
-						for (uint32_t k = 0; k < inner_count; k++) {
-							TSNode inner = ts_node_child(base_child, k);
-							const char *inner_type = ts_node_type(inner);
-							if (strcmp(inner_type, "identifier") == 0 || strcmp(inner_type, "generic_name") == 0 ||
-							    strcmp(inner_type, "qualified_name") == 0) {
-								type_name = ExtractNodeText(inner, content);
-								break;
-							}
-						}
 					}
 
 					if (!type_name.empty()) {
