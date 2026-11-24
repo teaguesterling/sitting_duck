@@ -76,6 +76,9 @@ CREATE OR REPLACE MACRO ast_function_metrics(source, language := NULL) AS TABLE
                 a.descendant_count
             FROM ast a
             WHERE is_function_definition(a.semantic_type)
+              -- #360: a constituent (a C++ definition's declarator) is part of
+              -- its function, not a function of its own.
+              AND NOT is_constituent(a.flags)
               AND a.name IS NOT NULL AND a.name != ''
         ),
         -- For each function, identify nested functions within it
@@ -89,6 +92,9 @@ CREATE OR REPLACE MACRO ast_function_metrics(source, language := NULL) AS TABLE
               ON nf.node_id > f.func_id
              AND nf.node_id <= f.func_id + f.descendant_count
              AND is_function_definition(nf.semantic_type)
+             -- #360: a constituent is not nested; its subtree (a C++
+             -- declarator's parameters) belongs to the function's scope.
+             AND NOT is_constituent(nf.flags)
         ),
         -- Compute metrics for each function
         -- Counts only nodes in function scope (excludes nested function internals)
@@ -180,6 +186,9 @@ CREATE OR REPLACE MACRO ast_functions_containing(source, target_type, language :
                 a.descendant_count
             FROM ast a
             WHERE is_function_definition(a.semantic_type)
+              -- #360: a constituent (a C++ definition's declarator) is part of
+              -- its function, not a function of its own.
+              AND NOT is_constituent(a.flags)
               AND a.name IS NOT NULL AND a.name != ''
         ),
         -- For each function, identify nested functions within it
@@ -193,6 +202,9 @@ CREATE OR REPLACE MACRO ast_functions_containing(source, target_type, language :
               ON nf.node_id > f.func_id
              AND nf.node_id <= f.func_id + f.descendant_count
              AND is_function_definition(nf.semantic_type)
+             -- #360: a constituent is not nested; its subtree (a C++
+             -- declarator's parameters) belongs to the function's scope.
+             AND NOT is_constituent(nf.flags)
         ),
         -- Find matching nodes in each function's scope
         matches AS (
@@ -259,6 +271,9 @@ CREATE OR REPLACE MACRO ast_nesting_analysis(source, language := NULL) AS TABLE
                 a.descendant_count
             FROM ast a
             WHERE is_function_definition(a.semantic_type)
+              -- #360: a constituent (a C++ definition's declarator) is part of
+              -- its function, not a function of its own.
+              AND NOT is_constituent(a.flags)
               AND a.name IS NOT NULL AND a.name != ''
         ),
         -- For each function, identify nested functions within it
@@ -272,6 +287,9 @@ CREATE OR REPLACE MACRO ast_nesting_analysis(source, language := NULL) AS TABLE
               ON nf.node_id > f.func_id
              AND nf.node_id <= f.func_id + f.descendant_count
              AND is_function_definition(nf.semantic_type)
+             -- #360: a constituent is not nested; its subtree (a C++
+             -- declarator's parameters) belongs to the function's scope.
+             AND NOT is_constituent(nf.flags)
         ),
         -- Compute depth statistics for each function
         depth_stats AS (
@@ -464,6 +482,9 @@ CREATE OR REPLACE MACRO ast_dead_code(source, language := NULL) AS TABLE
                 'function' AS definition_type
             FROM ast a
             WHERE is_function_definition(a.semantic_type)
+              -- #360: a constituent (a C++ definition's declarator) is part of
+              -- its function, not a function of its own.
+              AND NOT is_constituent(a.flags)
               AND a.name IS NOT NULL AND a.name != ''
               -- Exclude special methods (constructors, dunder methods, etc.)
               AND a.name NOT LIKE '\_\_%' ESCAPE '\'

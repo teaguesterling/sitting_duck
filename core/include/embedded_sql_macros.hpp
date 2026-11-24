@@ -365,6 +365,9 @@ CREATE OR REPLACE MACRO ast_source_of_from(
             FROM query_table(ast_table)
             WHERE is_definition(semantic_type)
               AND is_construct(flags)
+              -- #360: a constituent is part of a larger definition (a C++
+              -- definition's declarator); its source is that definition's.
+              AND NOT is_constituent(flags)
               AND name = target_name
               AND (kind IS NULL
                    OR (kind = 'function' AND is_function_definition(semantic_type))
@@ -454,11 +457,11 @@ CREATE OR REPLACE MACRO ast_source_of_from(
                                    ' matched row(s) were parsed by the duckdb adapter, ' ||
                                    'which reports start_line = end_line = 1 for every ' ||
                                    'node (tracker/bugs/043). The file can be read, but ' ||
-                                   'the definition cannot be located inside it, so any ' ||
-                                   'source returned would be the wrong lines. Parse with ' ||
 
 )SQLMACRO"
         R"SQLMACRO(
+                                   'the definition cannot be located inside it, so any ' ||
+                                   'source returned would be the wrong lines. Parse with ' ||
                                    'a tree-sitter language.')
                     ELSE true
                 END AS ok
@@ -874,6 +877,9 @@ CREATE OR REPLACE MACRO ast_function_scope(ast_table, func_node_id) AS TABLE
             SELECT node_id, descendant_count
             FROM descendants
             WHERE is_function_definition(semantic_type)
+              -- #360: a constituent is not nested; its subtree (a C++
+              -- declarator's parameters) is in the function's scope.
+              AND NOT is_constituent(flags)
         )
     -- Return descendants that are NOT inside any nested function
     SELECT d.*
@@ -1053,6 +1059,9 @@ CREATE OR REPLACE MACRO ast_function_metrics(source, language := NULL) AS TABLE
                 a.descendant_count
             FROM ast a
             WHERE is_function_definition(a.semantic_type)
+              -- #360: a constituent (a C++ definition's declarator) is part of
+              -- its function, not a function of its own.
+              AND NOT is_constituent(a.flags)
               AND a.name IS NOT NULL AND a.name != ''
         ),
         -- For each function, identify nested functions within it
@@ -1066,6 +1075,9 @@ CREATE OR REPLACE MACRO ast_function_metrics(source, language := NULL) AS TABLE
               ON nf.node_id > f.func_id
              AND nf.node_id <= f.func_id + f.descendant_count
              AND is_function_definition(nf.semantic_type)
+             -- #360: a constituent is not nested; its subtree (a C++
+             -- declarator's parameters) belongs to the function's scope.
+             AND NOT is_constituent(nf.flags)
         ),
         -- Compute metrics for each function
         -- Counts only nodes in function scope (excludes nested function internals)
@@ -1157,6 +1169,9 @@ CREATE OR REPLACE MACRO ast_functions_containing(source, target_type, language :
                 a.descendant_count
             FROM ast a
             WHERE is_function_definition(a.semantic_type)
+              -- #360: a constituent (a C++ definition's declarator) is part of
+              -- its function, not a function of its own.
+              AND NOT is_constituent(a.flags)
               AND a.name IS NOT NULL AND a.name != ''
         ),
         -- For each function, identify nested functions within it
@@ -1170,6 +1185,9 @@ CREATE OR REPLACE MACRO ast_functions_containing(source, target_type, language :
               ON nf.node_id > f.func_id
              AND nf.node_id <= f.func_id + f.descendant_count
              AND is_function_definition(nf.semantic_type)
+             -- #360: a constituent is not nested; its subtree (a C++
+             -- declarator's parameters) belongs to the function's scope.
+             AND NOT is_constituent(nf.flags)
         ),
         -- Find matching nodes in each function's scope
         matches AS (
@@ -1236,6 +1254,9 @@ CREATE OR REPLACE MACRO ast_nesting_analysis(source, language := NULL) AS TABLE
                 a.descendant_count
             FROM ast a
             WHERE is_function_definition(a.semantic_type)
+              -- #360: a constituent (a C++ definition's declarator) is part of
+              -- its function, not a function of its own.
+              AND NOT is_constituent(a.flags)
               AND a.name IS NOT NULL AND a.name != ''
         ),
         -- For each function, identify nested functions within it
@@ -1249,6 +1270,9 @@ CREATE OR REPLACE MACRO ast_nesting_analysis(source, language := NULL) AS TABLE
               ON nf.node_id > f.func_id
              AND nf.node_id <= f.func_id + f.descendant_count
              AND is_function_definition(nf.semantic_type)
+             -- #360: a constituent is not nested; its subtree (a C++
+             -- declarator's parameters) belongs to the function's scope.
+             AND NOT is_constituent(nf.flags)
         ),
         -- Compute depth statistics for each function
         depth_stats AS (
@@ -1271,6 +1295,9 @@ CREATE OR REPLACE MACRO ast_nesting_analysis(source, language := NULL) AS TABLE
             FROM functions f
             LEFT JOIN ast n
               ON n.node_id > f.func_id
+
+)SQLMACRO"
+        R"SQLMACRO(
              AND n.node_id <= f.func_id + f.descendant_count
             WHERE
                 -- Exclude nodes inside nested functions
@@ -1300,9 +1327,6 @@ CREATE OR REPLACE MACRO ast_nesting_analysis(source, language := NULL) AS TABLE
 -- Scans for common security anti-patterns across languages.
 -- Usage: SELECT * FROM ast_security_audit('src/**/*.py') WHERE risk_level = 'high'
 -- ----------------------------------------------------------------------------
-
-)SQLMACRO"
-        R"SQLMACRO(
 -- ast_security_audit: Risk-pattern findings per function: risk_category, risk_level, finding, matched_pattern
 -- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_security_audit(source, language := NULL) AS TABLE
@@ -1444,6 +1468,9 @@ CREATE OR REPLACE MACRO ast_dead_code(source, language := NULL) AS TABLE
                 'function' AS definition_type
             FROM ast a
             WHERE is_function_definition(a.semantic_type)
+              -- #360: a constituent (a C++ definition's declarator) is part of
+              -- its function, not a function of its own.
+              AND NOT is_constituent(a.flags)
               AND a.name IS NOT NULL AND a.name != ''
               -- Exclude special methods (constructors, dunder methods, etc.)
               AND a.name NOT LIKE '\_\_%' ESCAPE '\'
@@ -1595,6 +1622,9 @@ CREATE OR REPLACE MACRO ast_get_calls(source, language := NULL) AS TABLE
                                          'constructor_invocation', 'init_expression',
                                          'composite_literal', 'struct_expression')
                 THEN 'constructor'
+
+)SQLMACRO"
+        R"SQLMACRO(
             WHEN cwc.call_node_type IN ('macro_invocation')
                 THEN 'macro'
             WHEN cwc.target_type IN ('attribute', 'member_expression',
@@ -1624,9 +1654,6 @@ CREATE OR REPLACE MACRO ast_call_graph(source, language := NULL) AS TABLE
         )
     SELECT
         rc.file_path,
-
-)SQLMACRO"
-        R"SQLMACRO(
         rc.caller_name AS caller,
         rc.called_name AS callee,
         rc.call_type,
