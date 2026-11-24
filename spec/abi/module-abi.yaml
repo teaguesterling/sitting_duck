@@ -310,9 +310,9 @@ native_extraction:
   dead_dispatch:
     - {check: dispatch, language: c, literal: "function_specifier"}   # c_native_extractors.hpp:227
     - {check: dispatch, language: cpp, literal: "class_definition"}   # cpp_adapter.cpp:230
-    - {check: dispatch, language: cpp, literal: "function_specifier"}   # cpp_native_extractors.hpp:738
-    - {check: dispatch, language: cpp, literal: "pointer_type"}   # cpp_native_extractors.hpp:528
-    - {check: dispatch, language: cpp, literal: "reference_type"}   # cpp_native_extractors.hpp:528
+    - {check: dispatch, language: cpp, literal: "function_specifier"}   # cpp_native_extractors.hpp:754
+    - {check: dispatch, language: cpp, literal: "pointer_type"}   # cpp_native_extractors.hpp:544
+    - {check: dispatch, language: cpp, literal: "reference_type"}   # cpp_native_extractors.hpp:544
     - {check: dispatch, language: csharp, literal: "base_type"}   # csharp_native_extractors.hpp:255
     - {check: dispatch, language: csharp, literal: "equals_value_clause"}   # csharp_native_extractors.hpp:119
     - {check: dispatch, language: csharp, literal: "parameter_modifier"}   # csharp_native_extractors.hpp:116
@@ -327,9 +327,7 @@ native_extraction:
     - {check: dispatch, language: lua, literal: "local_variable_declaration"}   # lua_adapter.cpp:163
     - {check: dispatch, language: markdown, literal: "image"}   # markdown_adapter.cpp:68
     - {check: dispatch, language: markdown, literal: "link"}   # markdown_adapter.cpp:68
-    - {check: dispatch, language: php, literal: "optional_parameter"}   # php_native_extractors.hpp:102
-    - {check: dispatch, language: php, literal: "return_type"}   # php_native_extractors.hpp:51
-    - {check: dispatch, language: php, literal: "type_declaration"}   # php_native_extractors.hpp:139
+    - {check: dispatch, language: php, literal: "optional_parameter"}   # php_native_extractors.hpp:101
     - {check: dispatch, language: python, literal: "annotated_assignment"}   # python_native_extractors.hpp:651
     - {check: dispatch, language: python, literal: "async_function_definition"}   # python_native_extractors.hpp:1103
     - {check: dispatch, language: python, literal: "import_list"}   # python_native_extractors.hpp:1429
@@ -361,16 +359,15 @@ native_extraction:
     - {check: dispatch, language: typescript, literal: "number_literal"}   # typescript_native_extractors.hpp:1064
     - {check: dispatch, language: typescript, literal: "rest_parameter"}   # typescript_native_extractors.hpp:112
     - {check: dispatch, language: typescript, literal: "string_literal"}   # typescript_native_extractors.hpp:1066
-    - {check: table, language: php, literal: "argument_name"}   # function_call_extractor.hpp:169
-    - {check: table, language: r, literal: ","}   # function_call_extractor.hpp:214
-    - {check: table, language: r, literal: ";"}   # function_call_extractor.hpp:214
-    - {check: table, language: r, literal: "namespace_get"}   # function_call_extractor.hpp:213
-    - {check: table, language: r, literal: "namespace_get_internal"}   # function_call_extractor.hpp:213
-    - {check: table, language: ruby, literal: "chained_call"}   # function_call_extractor.hpp:180
-    - {check: table, language: ruby, literal: "method_call"}   # function_call_extractor.hpp:180
-    - {check: table, language: rust, literal: "method_call_expression"}   # function_call_extractor.hpp:132
-    - {check: table, language: swift, literal: "init_expression"}   # function_call_extractor.hpp:186
-    - {check: table, language: swift, literal: "labeled_argument"}   # function_call_extractor.hpp:204
+    - {check: table, language: r, literal: ","}   # function_call_extractor.hpp:223
+    - {check: table, language: r, literal: ";"}   # function_call_extractor.hpp:223
+    - {check: table, language: r, literal: "namespace_get"}   # function_call_extractor.hpp:222
+    - {check: table, language: r, literal: "namespace_get_internal"}   # function_call_extractor.hpp:222
+    - {check: table, language: ruby, literal: "chained_call"}   # function_call_extractor.hpp:189
+    - {check: table, language: ruby, literal: "method_call"}   # function_call_extractor.hpp:189
+    - {check: table, language: rust, literal: "method_call_expression"}   # function_call_extractor.hpp:140
+    - {check: table, language: swift, literal: "init_expression"}   # function_call_extractor.hpp:195
+    - {check: table, language: swift, literal: "labeled_argument"}   # function_call_extractor.hpp:213
 
 # Bare name-binding hooks (#64). A plain identifier is generically a
 # NAME_REFERENCE; in some parent contexts it introduces a name instead. Those
