@@ -310,9 +310,9 @@ native_extraction:
   dead_dispatch:
     - {check: dispatch, language: c, literal: "function_specifier"}   # c_native_extractors.hpp:227
     - {check: dispatch, language: cpp, literal: "class_definition"}   # cpp_adapter.cpp:230
-    - {check: dispatch, language: cpp, literal: "function_specifier"}   # cpp_native_extractors.hpp:760
-    - {check: dispatch, language: cpp, literal: "pointer_type"}   # cpp_native_extractors.hpp:550
-    - {check: dispatch, language: cpp, literal: "reference_type"}   # cpp_native_extractors.hpp:550
+    - {check: dispatch, language: cpp, literal: "function_specifier"}   # cpp_native_extractors.hpp:738
+    - {check: dispatch, language: cpp, literal: "pointer_type"}   # cpp_native_extractors.hpp:528
+    - {check: dispatch, language: cpp, literal: "reference_type"}   # cpp_native_extractors.hpp:528
     - {check: dispatch, language: csharp, literal: "base_type"}   # csharp_native_extractors.hpp:255
     - {check: dispatch, language: csharp, literal: "equals_value_clause"}   # csharp_native_extractors.hpp:119
     - {check: dispatch, language: csharp, literal: "parameter_modifier"}   # csharp_native_extractors.hpp:116
@@ -322,9 +322,6 @@ native_extraction:
     - {check: dispatch, language: go, literal: "primitive_type"}   # go_native_extractors.hpp:63
     - {check: dispatch, language: java, literal: "primitive_type"}   # java_native_extractors.hpp:16
     - {check: dispatch, language: kotlin, literal: "default_value"}   # kotlin_native_extractors.hpp:191
-    - {check: dispatch, language: kotlin, literal: "enum_class_declaration"}   # kotlin_native_extractors.hpp:495
-    - {check: dispatch, language: kotlin, literal: "interface_declaration"}   # kotlin_native_extractors.hpp:491
-    - {check: dispatch, language: kotlin, literal: "type"}   # kotlin_native_extractors.hpp:51
     - {check: dispatch, language: lua, literal: "local_function"}   # lua_adapter.cpp:163
     - {check: dispatch, language: lua, literal: "local_function_declaration"}   # lua_adapter.cpp:68
     - {check: dispatch, language: lua, literal: "local_variable_declaration"}   # lua_adapter.cpp:163
@@ -358,13 +355,13 @@ native_extraction:
     - {check: dispatch, language: swift, literal: "struct_declaration"}   # swift_adapter.cpp:81
     - {check: dispatch, language: swift, literal: "type_inheritance_clause"}   # swift_native_extractors.hpp:353
     - {check: dispatch, language: swift, literal: "variable_declaration"}   # swift_adapter.cpp:85
-    - {check: dispatch, language: typescript, literal: "field_declaration"}   # typescript_native_extractors.hpp:728
-    - {check: dispatch, language: typescript, literal: "module_declaration"}   # typescript_native_extractors.hpp:404
-    - {check: dispatch, language: typescript, literal: "namespace_declaration"}   # typescript_native_extractors.hpp:407
-    - {check: dispatch, language: typescript, literal: "number_literal"}   # typescript_native_extractors.hpp:1013
-    - {check: dispatch, language: typescript, literal: "parameter"}   # typescript_native_extractors.hpp:817
+    - {check: dispatch, language: typescript, literal: "field_declaration"}   # typescript_native_extractors.hpp:776
+    - {check: dispatch, language: typescript, literal: "module_declaration"}   # typescript_native_extractors.hpp:452
+    - {check: dispatch, language: typescript, literal: "namespace_declaration"}   # typescript_native_extractors.hpp:455
+    - {check: dispatch, language: typescript, literal: "number_literal"}   # typescript_native_extractors.hpp:1061
+    - {check: dispatch, language: typescript, literal: "parameter"}   # typescript_native_extractors.hpp:865
     - {check: dispatch, language: typescript, literal: "rest_parameter"}   # typescript_native_extractors.hpp:112
-    - {check: dispatch, language: typescript, literal: "string_literal"}   # typescript_native_extractors.hpp:1015
+    - {check: dispatch, language: typescript, literal: "string_literal"}   # typescript_native_extractors.hpp:1063
     - {check: table, language: php, literal: "argument_name"}   # function_call_extractor.hpp:169
     - {check: table, language: r, literal: ","}   # function_call_extractor.hpp:214
     - {check: table, language: r, literal: ";"}   # function_call_extractor.hpp:214
