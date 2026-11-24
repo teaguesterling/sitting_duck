@@ -147,6 +147,9 @@ CREATE OR REPLACE MACRO ast_source_of_from(
             FROM query_table(ast_table)
             WHERE is_definition(semantic_type)
               AND is_construct(flags)
+              -- #360: a constituent is part of a larger definition (a C++
+              -- definition's declarator); its source is that definition's.
+              AND NOT is_constituent(flags)
               AND name = target_name
               AND (kind IS NULL
                    OR (kind = 'function' AND is_function_definition(semantic_type))

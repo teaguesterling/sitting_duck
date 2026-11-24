@@ -493,7 +493,29 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType *adapte
 			// is unique within a file; file_path tells files apart.
 			if (config.context >= ContextLevel::NORMALIZED && !is_root) {
 				char type_code = SemanticTypes::GetQualifiedNamePrefix(ast_node.semantic_type);
-				if (type_code != '\0' && !ast_node.name_raw.empty()) {
+				// #360: a constituent function -- the function_declarator of a C++
+				// function_definition -- names the function its definition already
+				// opened a segment for. A second F[...] segment would give every
+				// parameter the path `F[f] F[f] V[a]`. So it takes the definition's
+				// path and opens no segment of its own.
+				//
+				// Only when the top segment IS a function's, which then must be
+				// that definition's: a C++ function_definition cannot hold another
+				// one directly (a local class's method is under its class segment).
+				// When the definition has no name of its own -- `int (*fp(int
+				// a))(char) {}` names nothing today -- it opened no segment, and the
+				// declarator stays the one that carries the function's name.
+				const bool constituent_of_open_function =
+				    type_code == 'F' && (ast_node.universal_flags & ASTNodeFlags::IS_CONSTITUENT) &&
+				    !scope_stack.empty() &&
+				    (scope_stack.back().second.semantic_type & 0xFC) == SemanticTypes::DEFINITION_FUNCTION;
+				if (constituent_of_open_function) {
+					ast_node.name_qualified_segments.clear();
+					ast_node.name_qualified_segments.reserve(scope_stack.size());
+					for (auto &scope : scope_stack) {
+						ast_node.name_qualified_segments.push_back(scope.second);
+					}
+				} else if (type_code != '\0' && !ast_node.name_raw.empty()) {
 					// Counter key — stable on (semantic_type, name). We mix in the
 					// semantic_type byte so V[x] and F[x] don't collide as a single key.
 					string counter_key = std::to_string(ast_node.semantic_type) + "\x00" + ast_node.name_raw;

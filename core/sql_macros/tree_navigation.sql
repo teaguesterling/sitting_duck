@@ -331,6 +331,9 @@ CREATE OR REPLACE MACRO ast_function_scope(ast_table, func_node_id) AS TABLE
             SELECT node_id, descendant_count
             FROM descendants
             WHERE is_function_definition(semantic_type)
+              -- #360: a constituent is not nested; its subtree (a C++
+              -- declarator's parameters) is in the function's scope.
+              AND NOT is_constituent(flags)
         )
     -- Return descendants that are NOT inside any nested function
     SELECT d.*

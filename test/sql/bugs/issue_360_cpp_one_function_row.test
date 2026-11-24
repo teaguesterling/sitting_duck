@@ -163,6 +163,91 @@ WHERE type LIKE 'function_%' ORDER BY node_id;
 function_definition	false
 function_declarator	false
 
+# --- the macros that count functions -------------------------------------------
+# Decided 2026-11-24 by Teague: "Extend #365 now". These macros select
+# functions with is_function_definition(), so each listed a C++ function twice,
+# and they treated the declarator as a NESTED function, whose subtree they
+# exclude from the outer function's scope. So a C++ function's parameters were
+# outside its own scope. In Python a function's parameters are inside it, and
+# the declarator is part of the definition, so now they are in C++ too.
+#
+# test/data/variadic/sample.cpp:
+#   2  int c_style(int count, ...);          a prototype: one row, its declarator
+#   3  template <...> void pack(Args... args) {}
+#   4  void plain(int a, double b) {}
+#
+# Before: pack and plain twice each. The definition row had max_depth 2, and the
+# declarator row 4 (pack) and 3 (plain), measured relative to the declarator, one
+# level down. With the declarator subtree in scope, the definition reaches 5 and 4.
+query TIII
+SELECT name, start_line, max_depth, cyclomatic FROM ast_function_metrics('test/data/variadic/sample.cpp')
+ORDER BY start_line, name;
+----
+c_style	2	3	1
+pack	3	5	1
+plain	4	4	1
+
+# total_nodes was 5 on the definition (with the declarator node itself, but not
+# its 9 / 11 descendants) and 9 / 11 on the declarator row.
+query TIII
+SELECT name, start_line, max_depth, total_nodes FROM ast_nesting_analysis('test/data/variadic/sample.cpp')
+ORDER BY start_line, name;
+----
+c_style	2	3	9
+pack	3	5	14
+plain	4	4	16
+
+# Every parameter name is reported under its function, once. (Unchanged in
+# count: the declarator row used to carry them under the same name. A filter on
+# the outer list alone would have lost them.)
+query TT
+SELECT func_name, match_name FROM ast_functions_containing('test/data/variadic/sample.cpp', 'identifier')
+ORDER BY func_start_line, match_line, match_name;
+----
+c_style	c_style
+c_style	count
+pack	args
+pack	pack
+plain	a
+plain	b
+plain	plain
+
+query TT
+SELECT name, type FROM ast_dead_code('test/data/variadic/sample.cpp') ORDER BY start_line, type;
+----
+c_style	function_declarator
+pack	function_definition
+plain	function_definition
+
+statement ok
+CREATE TABLE sample AS SELECT * FROM read_ast('test/data/variadic/sample.cpp');
+
+query TII
+SELECT name, start_line, end_line FROM ast_source_of_from('sample', 'test/data/variadic/sample.cpp', 'plain');
+----
+plain	4	4
+
+# The function's scope holds its parameters (before: no identifier at all).
+query T
+SELECT name FROM ast_function_scope('sample',
+    (SELECT node_id FROM sample WHERE type = 'function_definition' AND name = 'plain'))
+WHERE type = 'identifier' ORDER BY node_id;
+----
+plain
+a
+b
+
+# qualified_name: the declarator is not a second F[plain] segment. It names the
+# same function as its definition, so it has the definition's path.
+query TTT
+SELECT type, name, ast_qualified_name_as_string(qualified_name) FROM sample
+WHERE start_line = 4 AND qualified_name IS NOT NULL AND len(qualified_name) > 0 ORDER BY node_id;
+----
+function_definition	plain	F[plain]
+function_declarator	plain	F[plain]
+parameter_declaration	a	F[plain] V[a]
+parameter_declaration	b	F[plain] V[b]
+
 # --- the corpus ----------------------------------------------------------------
 statement ok
 CREATE TABLE corpus AS SELECT * FROM read_ast('test/data/cpp/**/*.cpp', ignore_errors := true);
