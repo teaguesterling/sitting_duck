@@ -656,7 +656,12 @@ string LanguageAdapter::ExtractByStrategy(TSNode node, const string &content, Ex
 		    first_child_type == "field_access" || first_child_type == "scoped_identifier" ||
 		    first_child_type == "qualified_identifier" || first_child_type == "navigation_expression" ||
 		    first_child_type == "member_access_expression" || first_child_type == "method_index_expression" ||
-		    first_child_type == "dot_index_expression" || first_child_type == "variable_name") {
+		    first_child_type == "dot_index_expression" || first_child_type == "variable_name" ||
+		    first_child_type == "namespace_operator") {
+			// R `pkg::f()` / `pkg:::f()` is a namespace_operator (lhs, `::` or
+			// `:::`, rhs). Like rust's scoped_identifier it names the bare
+			// callee, the rightmost identifier: `base::paste` -> paste.
+			//
 			// Lua dot-form calls (`math.floor(x)`) land here via
 			// dot_index_expression, which the colon form's
 			// method_index_expression twin already covered (#209). Both resolve
