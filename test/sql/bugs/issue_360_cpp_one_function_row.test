@@ -1,0 +1,199 @@
+# name: test/sql/bugs/issue_360_cpp_one_function_row.test
+# description: #360 — a C++ function is one function row, not a definition plus its declarator
+# group: [bugs]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# ---------------------------------------------------------------------------
+# Before: cpp_types.def gives BOTH function_definition and its
+# function_declarator child the semantic type DEFINITION_FUNCTION. Every C++
+# function with a body was therefore two function rows:
+#
+#   - `.function` returned both (measured at 4cb557a and in v1.18.4);
+#   - ast_to_blocks wrote every heading twice;
+#   - ast_definitions collapsed the pair only when the declarator was the
+#     DIRECT child with the SAME name (#276), so `int *make(int)` (a
+#     pointer_declarator between them) and `void A::f()` (names `f` and
+#     `A::f`) were still two rows.
+#
+# The declarator is NOT always redundant. A prototype, `int add(int, int);`,
+# is a `declaration` whose only function row IS the declarator. So the
+# declarator is a constituent only where it sits on a function_definition's
+# `declarator` path, and that is a property of position, not of node type.
+# node_config.hpp already names "a function's declarator" as the example
+# IS_CONSTITUENT, and class selectors skip constituents (#139).
+#
+# Decided 2026-11-23 by Teague: the walker sets IS_CONSTITUENT by position;
+# the bare attribute selector `[params=N]` stays a per-node filter.
+# ---------------------------------------------------------------------------
+
+statement ok
+CREATE TABLE src AS SELECT * FROM parse_ast('int add(int a, int b);
+int *make(int n) { return 0; }
+class A {
+  void f(int x);
+  int g(int y) { return y; }
+};
+void A::f(int x) {}
+int add(int a, int b) { return a + b; }', 'cpp', peek := 'full');
+
+# --- the flag ------------------------------------------------------------------
+# Line 1 and line 4 are prototypes: the declarator is the whole function, so it
+# is not a constituent. Every declarator under a definition is one, including
+# through a pointer_declarator (line 2) and with a qualified name (line 7).
+query ITI
+SELECT start_line, type, is_constituent(flags) FROM src
+WHERE type IN ('function_declarator', 'function_definition') ORDER BY node_id;
+----
+1	function_declarator	false
+2	function_definition	false
+2	function_declarator	true
+4	function_declarator	false
+5	function_definition	false
+5	function_declarator	true
+7	function_definition	false
+7	function_declarator	true
+8	function_definition	false
+8	function_declarator	true
+
+# --- one row per function ---------------------------------------------------------
+query ITT
+SELECT start_line, type, name FROM ast_select_from('src', '.function') ORDER BY node_id;
+----
+1	function_declarator	add
+2	function_definition	make
+4	function_declarator	f
+5	function_definition	g
+7	function_definition	f
+8	function_definition	add
+
+query ITT
+SELECT start_line, type, name FROM ast_definitions_from('src')
+WHERE definition_type = 'function' ORDER BY node_id;
+----
+1	function_declarator	add
+2	function_definition	make
+4	function_declarator	f
+5	function_definition	g
+7	function_definition	f
+8	function_definition	add
+
+# Headings of functions only (a heading with a parameter list). Each function
+# once, and `make` keeps its parameter: before, only the declarator row had it,
+# so dropping that row alone would have printed `make() -> int`.
+query T
+SELECT block.content FROM ast_to_blocks_from('src')
+WHERE block.element_type = 'heading' AND block.content LIKE '%(%' ORDER BY element_order;
+----
+add(a: int, b: int) -> int
+make(n: int) -> int
+f(x: int) -> void
+g(y: int) -> int
+f(x: int) -> void
+add(a: int, b: int) -> int
+
+# The definition carries the parameters itself, through the pointer_declarator.
+query IT
+SELECT start_line, list_transform(parameters, lambda p: p.name) FROM src
+WHERE type = 'function_definition' ORDER BY node_id;
+----
+2	[n]
+5	[y]
+7	[x]
+8	[a, b]
+
+# A function that returns a function pointer has TWO function_declarators on
+# its declarator path: the inner one holds `fp(int a)`, the outer one the
+# `(char)` of the pointer it returns. Neither is a second function, so both
+# are constituents and `.function` keeps the definition alone. (Before, the
+# outer one was a third, unnamed function row.)
+statement ok
+CREATE TABLE fp_src AS SELECT * FROM parse_ast('int (*fp(int a))(char) { return 0; }', 'cpp');
+
+query TI
+SELECT type, is_constituent(flags) FROM fp_src
+WHERE type IN ('function_declarator', 'function_definition') ORDER BY node_id;
+----
+function_definition	false
+function_declarator	true
+function_declarator	true
+
+query T
+SELECT type FROM ast_select_from('fp_src', '.function') ORDER BY node_id;
+----
+function_definition
+
+# --- unchanged by decision -----------------------------------------------------
+# A bare attribute selector is a per-node filter, as [name=x] is: it still
+# returns the declarator and the parameter_list. `.function[params=1]` is the
+# one-row-per-function form.
+query IT
+SELECT start_line, type FROM ast_select_from('src', '[params=1]') ORDER BY node_id;
+----
+2	function_definition
+2	function_declarator
+2	parameter_list
+4	function_declarator
+4	parameter_list
+5	function_definition
+5	function_declarator
+5	parameter_list
+7	function_definition
+7	function_declarator
+7	parameter_list
+
+query IT
+SELECT start_line, type FROM ast_select_from('src', '.function[params=1]') ORDER BY node_id;
+----
+2	function_definition
+4	function_declarator
+5	function_definition
+7	function_definition
+
+# --- C is not touched ----------------------------------------------------------
+# C's function_declarator is TYPE_COMPOSITE, not a function definition, so it
+# was never a second function row and the flag does not reach it.
+query TI
+SELECT type, is_constituent(flags) FROM parse_ast('int add(int a) { return a; }', 'c')
+WHERE type LIKE 'function_%' ORDER BY node_id;
+----
+function_definition	false
+function_declarator	false
+
+# --- the corpus ----------------------------------------------------------------
+statement ok
+CREATE TABLE corpus AS SELECT * FROM read_ast('test/data/cpp/**/*.cpp', ignore_errors := true);
+
+# Every constituent declarator lies inside a function_definition.
+query I
+SELECT count(*) FROM corpus c
+WHERE c.type = 'function_declarator' AND is_constituent(c.flags)
+  AND NOT EXISTS (SELECT 1 FROM corpus d
+                  WHERE d.file_path = c.file_path AND d.type = 'function_definition'
+                    AND c.node_id > d.node_id AND c.node_id <= d.node_id + d.descendant_count);
+----
+0
+
+# Every function_definition has at least one constituent declarator, so no
+# definition is left paired with an unmarked one. Not "exactly one": a function
+# that returns a function pointer has two (see fp_src above), and both are
+# constituents.
+query I
+SELECT count(*) FROM (
+    SELECT d.file_path, d.node_id, count(c.node_id) AS n
+    FROM corpus d LEFT JOIN corpus c
+      ON c.file_path = d.file_path AND c.type = 'function_declarator' AND is_constituent(c.flags)
+     AND c.node_id > d.node_id AND c.node_id <= d.node_id + d.descendant_count
+     -- the nearest definition only: a local class's method is its own pair
+     AND NOT EXISTS (SELECT 1 FROM corpus m
+                     WHERE m.file_path = d.file_path AND m.type = 'function_definition'
+                       AND m.node_id > d.node_id AND m.node_id <= d.node_id + d.descendant_count
+                       AND c.node_id > m.node_id AND c.node_id <= m.node_id + m.descendant_count)
+    WHERE d.type = 'function_definition'
+    GROUP BY d.file_path, d.node_id) t
+WHERE n = 0;
+----
+0

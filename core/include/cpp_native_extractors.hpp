@@ -401,6 +401,22 @@ struct CppNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS> {
 				}
 				return params;
 			}
+			// #360. A definition whose declarator is not its direct child --
+			// `int *make(int n)`, `int &ref()` -- found no function_declarator
+			// in the scan below and reported no parameters. Only its declarator
+			// row had them, so a heading built from the definition read
+			// `make() -> int`. The walk also picks the declarator nearest the
+			// name, so `int (*fp(int a))(char)` reports `a`, not the `char` of
+			// the pointer it returns.
+			if (strcmp(node_type, "function_definition") == 0) {
+				TSNode function_declarator = FindFunctionDeclaratorNode(node);
+				if (!ts_node_is_null(function_declarator)) {
+					TSNode list = ts_node_child_by_field_name(function_declarator, "parameters", 10);
+					if (!ts_node_is_null(list)) {
+						return ExtractCppParametersDirect(list, content);
+					}
+				}
+			}
 		}
 
 		// For C++, parameters are nested: function_definition -> function_declarator -> parameter_list

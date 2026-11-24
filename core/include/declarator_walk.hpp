@@ -64,6 +64,50 @@ inline TSNode FindDeclaratorIdNode(TSNode declarator) {
 	return none;
 }
 
+// #360. The function_declarator that belongs to a function_definition: the
+// one that holds the function's OWN name and parameters.
+//
+// It is not always the definition's direct child. `int *make(int n)` puts a
+// pointer_declarator between them, and `int &ref()` a reference_declarator.
+// A function returning a function pointer, `int (*fp(int a))(char)`, has TWO
+// function_declarators on the path: the outer one holds `(char)`, the
+// parameters of the RETURNED pointer. So the walk follows the same links as
+// FindDeclaratorIdNode and returns the LAST function_declarator before the
+// declarator-id, which is the one nearest the name.
+//
+// The walk stops at a node it has no link rule for (`A::f` is a
+// qualified_identifier, `~A` a destructor_name). The last function_declarator
+// seen is still the answer there. Returns a null node when there is none.
+inline TSNode FindFunctionDeclaratorNode(TSNode definition) {
+	TSNode found = {};
+	TSNode current = ts_node_child_by_field_name(definition, "declarator", 10);
+	for (uint32_t guard = 0; guard < 32; guard++) {
+		if (ts_node_is_null(current)) {
+			break;
+		}
+		const char *node_type = ts_node_type(current);
+		if (!node_type) {
+			break;
+		}
+		if (std::strcmp(node_type, "function_declarator") == 0) {
+			found = current;
+			current = ts_node_child_by_field_name(current, "declarator", 10);
+			continue;
+		}
+		if (std::strcmp(node_type, "pointer_declarator") == 0 || std::strcmp(node_type, "array_declarator") == 0) {
+			current = ts_node_child_by_field_name(current, "declarator", 10);
+			continue;
+		}
+		if (std::strcmp(node_type, "reference_declarator") == 0 ||
+		    std::strcmp(node_type, "parenthesized_declarator") == 0) {
+			current = ts_node_named_child(current, 0);
+			continue;
+		}
+		break;
+	}
+	return found;
+}
+
 // #318. The node types whose name IS the declarator-id, so that an ABSENT
 // declarator means the node has no name rather than "look somewhere else".
 //

@@ -706,6 +706,15 @@ void PopulateSemanticFieldsTemplated(ASTNode &node, const AdapterType *adapter, 
 			}
 		}
 
+		// #360: a C++ function_declarator on a function_definition's declarator
+		// path is part of that definition, not a second function. A prototype's
+		// declarator is not on such a path and stays a function row of its own.
+		// See IsDeclaratorOfEnclosingFunction (native_context_extraction.hpp).
+		if (base_semantic == SemanticTypes::DEFINITION_FUNCTION &&
+		    IsDeclaratorOfEnclosingFunction<AdapterType>(ts_node)) {
+			node.universal_flags |= ASTNodeFlags::IS_CONSTITUENT;
+		}
+
 		// NATIVE CONTEXT EXTRACTION: Use template specialization for zero-virtual-call performance
 		// Only extract native context if the config level allows it
 		if (config.context >= ContextLevel::NATIVE && node_config->native_strategy != NativeExtractionStrategy::NONE) {

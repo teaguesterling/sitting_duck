@@ -115,6 +115,12 @@ CREATE OR REPLACE MACRO ast_definitions_from(ast_table) AS TABLE
               -- NULL there must empty the answer, not default every row to
               -- 'variable'. Without this the role test (TRUE OR NULL) passes.
               AND a.semantic_type IS NOT NULL
+              -- #360: a constituent definition is part of a larger one, such
+              -- as the function_declarator of a C++ function_definition. The
+              -- definition is the row. Narrowed to definition KINDS on
+              -- purpose: python's aliased_import is a constituent with a
+              -- NAME_DEFINITION role, and it is the binding of its alias.
+              AND NOT (is_constituent(a.flags) AND is_definition(a.semantic_type))
               AND (is_name_definition(a.flags)
                    OR is_name_declaration(a.flags)
                    OR (NOT is_name_reference(a.flags)

@@ -421,6 +421,70 @@ inline bool IsBareNameDefinitionField<TSXAdapter>(TSNode self, TSNode parent, co
 	return IsBareNameDefinitionField<TypeScriptAdapter>(self, parent, parent_type);
 }
 
+// #360 — a function's declarator is a constituent of its definition.
+//
+// cpp_types.def gives both `function_definition` and `function_declarator`
+// the semantic type DEFINITION_FUNCTION, and it must: a prototype,
+// `int add(int, int);`, is a `declaration` whose only function row IS the
+// declarator. So the node type cannot say which declarators are redundant.
+// Position can. A declarator is part of a definition when it lies on that
+// definition's `declarator` path, through the same links the declarator walk
+// follows (declarator_walk.hpp).
+//
+// EVERY function_declarator on the path is a constituent, not only the one
+// nearest the name. `int (*fp(int a))(char) {}` has two: `fp(int a)`, and the
+// outer `(char)` of the pointer it returns. Neither is a function of its own.
+//
+// The walker sets IS_CONSTITUENT, which node_config.hpp already names "a
+// function's declarator" as the example of. Default: no language has the shape.
+// C does not need it, because c_types.def types function_declarator as
+// TYPE_COMPOSITE, so it was never a second function row.
+template <class AdapterType>
+inline bool IsDeclaratorOfEnclosingFunction(TSNode /*self*/) {
+	return false;
+}
+template <>
+inline bool IsDeclaratorOfEnclosingFunction<CPPAdapter>(TSNode self) {
+	const char *self_type = ts_node_type(self);
+	if (!self_type || std::strcmp(self_type, "function_declarator") != 0) {
+		return false;
+	}
+	TSNode current = self;
+	// The path is a few links long in real code. The guard only stops a
+	// malformed tree from spinning.
+	for (uint32_t guard = 0; guard < 32; guard++) {
+		TSNode parent = ts_node_parent(current);
+		if (ts_node_is_null(parent)) {
+			return false;
+		}
+		const char *parent_type = ts_node_type(parent);
+		if (!parent_type) {
+			return false;
+		}
+		const bool links_by_field = std::strcmp(parent_type, "function_definition") == 0 ||
+		                            std::strcmp(parent_type, "function_declarator") == 0 ||
+		                            std::strcmp(parent_type, "pointer_declarator") == 0 ||
+		                            std::strcmp(parent_type, "array_declarator") == 0;
+		const bool links_by_child = std::strcmp(parent_type, "reference_declarator") == 0 ||
+		                            std::strcmp(parent_type, "parenthesized_declarator") == 0;
+		if (links_by_field) {
+			// Only the `declarator` field is on the path. A function_declarator
+			// in any other field (a parameter's own declarator sits under a
+			// parameter_declaration, so it never gets here) is not this one.
+			if (!ts_node_eq(current, ts_node_child_by_field_name(parent, "declarator", 10))) {
+				return false;
+			}
+			if (std::strcmp(parent_type, "function_definition") == 0) {
+				return true;
+			}
+		} else if (!links_by_child) {
+			return false;
+		}
+		current = parent;
+	}
+	return false;
+}
+
 template <>
 struct NativeExtractionTraits<JavaAdapter> {
 	template <NativeExtractionStrategy Strategy>
