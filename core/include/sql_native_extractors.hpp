@@ -59,9 +59,11 @@ struct SQLNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS> {
 				context.signature_type = "VIEW";
 				context.parameters = ExtractViewColumns(node, content);
 				context.modifiers = ExtractViewModifiers(node, content);
-			} else if (node_type == "function_call") {
+			} else if (node_type == "invocation") {
+				// tree-sitter-sql has no `function_call` node. A call is an
+				// invocation: object_reference(name) "(" term "," term ")".
 				context.signature_type = "FUNCTION";
-				context.parameters = ExtractFunctionArguments(node, content);
+				context.parameters = ExtractInvocationArguments(node, content);
 				context.modifiers.clear();
 			} else if (node_type == "window_function") {
 				context.signature_type = "WINDOW_FUNCTION";
@@ -171,8 +173,7 @@ struct SQLNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS> {
 			if (child_type == "identifier" || child_type == "column") {
 				info.name = ExtractNodeText(child, content);
 			} else if (child_type == "bigint" || child_type == "varchar" || child_type == "int" ||
-			           child_type == "decimal" || child_type == "timestamp" || child_type == "text" ||
-			           child_type.find("keyword_") == 0) {
+			           child_type == "decimal" || child_type == "timestamp" || child_type.find("keyword_") == 0) {
 				info.type = ExtractNodeText(child, content);
 			}
 		}
@@ -205,7 +206,7 @@ struct SQLNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS> {
 				TSNode child = ts_node_child(select_expr, i);
 				string child_type = ts_node_type(child);
 
-				if (child_type == "identifier" || child_type == "field" || child_type == "column_reference") {
+				if (child_type == "identifier" || child_type == "field") {
 					ParameterInfo info;
 					info.name = ExtractNodeText(child, content);
 					info.type = ""; // SQL columns don't have explicit types in SELECT
@@ -343,6 +344,32 @@ struct SQLNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS> {
 			}
 		}
 
+		return args;
+	}
+
+	// An invocation holds its arguments as direct children, with no argument-list
+	// node. Skip the punctuation and the object_reference that names the function.
+	static vector<ParameterInfo> ExtractInvocationArguments(TSNode node, const string &content) {
+		vector<ParameterInfo> args;
+		bool name_seen = false;
+		uint32_t child_count = ts_node_child_count(node);
+		for (uint32_t i = 0; i < child_count; i++) {
+			TSNode child = ts_node_child(node, i);
+			string child_type = ts_node_type(child);
+			if (child_type == "," || child_type == "(" || child_type == ")") {
+				continue;
+			}
+			if (!name_seen && child_type == "object_reference") {
+				name_seen = true;
+				continue;
+			}
+			ParameterInfo info;
+			info.name = ExtractNodeText(child, content);
+			info.type = ""; // a call argument has no declared type
+			info.is_optional = false;
+			info.is_variadic = false;
+			args.push_back(info);
+		}
 		return args;
 	}
 
@@ -526,7 +553,7 @@ struct SQLNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS> {
 
 			// Skip operators, focus on operands
 			if (child_type != "=" && child_type != ">" && child_type != "<" && child_type != ">=" &&
-			    child_type != "<=" && child_type != "!=" && child_type != "AND" && child_type != "OR") {
+			    child_type != "<=" && child_type != "!=" && child_type != "keyword_and" && child_type != "keyword_or") {
 				ParameterInfo operand;
 				operand.name = ExtractNodeText(child, content);
 				operand.type = child_type;
@@ -552,7 +579,7 @@ struct SQLNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS> {
 			    child_type == "<=" || child_type == "!=") {
 				modifiers.push_back("COMPARISON");
 				break;
-			} else if (child_type == "AND" || child_type == "OR") {
+			} else if (child_type == "keyword_and" || child_type == "keyword_or") {
 				modifiers.push_back("LOGICAL");
 				break;
 			}
@@ -687,20 +714,11 @@ struct SQLNativeExtractor<NativeExtractionStrategy::VARIABLE_WITH_TYPE> {
 				context.signature_type = "REFERENCE";
 				context.parameters.clear();
 				context.modifiers = ExtractReferenceModifiers(node, content);
-			} else if (node_type == "column_reference") {
-				context.signature_type = "COLUMN";
-				context.parameters.clear();
-				context.modifiers.clear();
-			} else if (node_type == "table_reference") {
-				context.signature_type = "TABLE";
-				context.parameters.clear();
-				context.modifiers.clear();
 			} else if (node_type == "relation") {
 				context.signature_type = "RELATION";
 				context.parameters.clear();
 				context.modifiers.clear();
-			} else if (node_type == "literal" || node_type == "string_literal" || node_type == "number_literal" ||
-			           node_type == "boolean_literal") {
+			} else if (node_type == "literal") {
 				context.signature_type = "LITERAL";
 				context.parameters.clear();
 				context.modifiers =
@@ -738,7 +756,7 @@ struct SQLNativeExtractor<NativeExtractionStrategy::VARIABLE_WITH_TYPE> {
 			string child_type = ts_node_type(child);
 
 			if (child_type == "bigint" || child_type == "varchar" || child_type == "int" || child_type == "decimal" ||
-			    child_type == "timestamp" || child_type == "text" || child_type == "smallint" ||
+			    child_type == "timestamp" || child_type == "keyword_text" || child_type == "smallint" ||
 			    child_type == "double" || child_type == "float" || child_type == "char" || child_type == "time" ||
 			    child_type == "interval") {
 				return ExtractNodeText(child, content);
@@ -784,13 +802,19 @@ struct SQLNativeExtractor<NativeExtractionStrategy::VARIABLE_WITH_TYPE> {
 	static vector<string> ExtractLiteralModifiers(TSNode node, const string &content) {
 		vector<string> modifiers;
 
-		string node_type = ts_node_type(node);
-		if (node_type == "string_literal") {
-			modifiers.push_back("STRING");
-		} else if (node_type == "number_literal") {
-			modifiers.push_back("NUMBER");
-		} else if (node_type == "boolean_literal") {
+		// tree-sitter-sql emits one `literal` node for every kind, so the kind
+		// comes from its content: TRUE / FALSE carry a keyword child, a string
+		// starts with a quote, a number with a digit or a point. NULL (a
+		// keyword_null child) is none of these.
+		TSNode first = ts_node_child(node, 0);
+		string first_type = ts_node_child_count(node) > 0 ? ts_node_type(first) : "";
+		string text = ExtractNodeText(node, content);
+		if (first_type == "keyword_true" || first_type == "keyword_false") {
 			modifiers.push_back("BOOLEAN");
+		} else if (!text.empty() && text[0] == '\'') {
+			modifiers.push_back("STRING");
+		} else if (!text.empty() && (isdigit(static_cast<unsigned char>(text[0])) || text[0] == '.')) {
+			modifiers.push_back("NUMBER");
 		} else {
 			modifiers.push_back("GENERIC");
 		}

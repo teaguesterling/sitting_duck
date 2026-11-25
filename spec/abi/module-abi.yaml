@@ -312,30 +312,17 @@ native_extraction:
     - {check: dispatch, language: cpp, literal: "reference_type"}   # cpp_native_extractors.hpp:544
     - {check: dispatch, language: csharp, literal: "equals_value_clause"}   # csharp_native_extractors.hpp:119
     - {check: dispatch, language: csharp, literal: "parameter_modifier"}   # csharp_native_extractors.hpp:116
-    - {check: dispatch, language: css, literal: "media_feature_name"}   # css_native_extractors.hpp:169
-    - {check: dispatch, language: css, literal: "variable_name"}   # css_native_extractors.hpp:382
     - {check: dispatch, language: kotlin, literal: "default_value"}   # kotlin_native_extractors.hpp:191
     - {check: dispatch, language: lua, literal: "local_function"}   # lua_adapter.cpp:163
     - {check: dispatch, language: lua, literal: "local_variable_declaration"}   # lua_adapter.cpp:163
     - {check: dispatch, language: markdown, literal: "image"}   # markdown_adapter.cpp:68
     - {check: dispatch, language: markdown, literal: "link"}   # markdown_adapter.cpp:68
-    - {check: dispatch, language: php, literal: "optional_parameter"}   # php_native_extractors.hpp:102
-    - {check: dispatch, language: php, literal: "return_type"}   # php_native_extractors.hpp:51
-    - {check: dispatch, language: php, literal: "type_declaration"}   # php_native_extractors.hpp:139
+    - {check: dispatch, language: php, literal: "optional_parameter"}   # php_native_extractors.hpp:101
     - {check: dispatch, language: python, literal: "import_list"}   # python_native_extractors.hpp:1373
-    - {check: dispatch, language: sql, literal: "AND"}   # sql_native_extractors.hpp:529
-    - {check: dispatch, language: sql, literal: "OR"}   # sql_native_extractors.hpp:529
-    - {check: dispatch, language: sql, literal: "boolean_literal"}   # sql_native_extractors.hpp:703
-    - {check: dispatch, language: sql, literal: "column_reference"}   # sql_native_extractors.hpp:208
-    - {check: dispatch, language: sql, literal: "delete_statement"}   # sql_native_extractors.hpp:82
-    - {check: dispatch, language: sql, literal: "function_call"}   # sql_native_extractors.hpp:62
-    - {check: dispatch, language: sql, literal: "insert_statement"}   # sql_native_extractors.hpp:74
-    - {check: dispatch, language: sql, literal: "number_literal"}   # sql_native_extractors.hpp:702
-    - {check: dispatch, language: sql, literal: "select_statement"}   # sql_native_extractors.hpp:70
-    - {check: dispatch, language: sql, literal: "string_literal"}   # sql_native_extractors.hpp:702
-    - {check: dispatch, language: sql, literal: "table_reference"}   # sql_native_extractors.hpp:694
-    - {check: dispatch, language: sql, literal: "text"}   # sql_native_extractors.hpp:174
-    - {check: dispatch, language: sql, literal: "update_statement"}   # sql_native_extractors.hpp:78
+    - {check: dispatch, language: sql, literal: "delete_statement"}   # sql_native_extractors.hpp:84
+    - {check: dispatch, language: sql, literal: "insert_statement"}   # sql_native_extractors.hpp:76
+    - {check: dispatch, language: sql, literal: "select_statement"}   # sql_native_extractors.hpp:72
+    - {check: dispatch, language: sql, literal: "update_statement"}   # sql_native_extractors.hpp:80
     - {check: dispatch, language: swift, literal: "access_level_modifier"}   # swift_native_extractors.hpp:211
     - {check: dispatch, language: swift, literal: "closure_parameters"}   # swift_native_extractors.hpp:263
     - {check: dispatch, language: swift, literal: "default_parameter_clause"}   # swift_native_extractors.hpp:150
@@ -351,13 +338,12 @@ native_extraction:
     - {check: dispatch, language: typescript, literal: "number_literal"}   # typescript_native_extractors.hpp:1064
     - {check: dispatch, language: typescript, literal: "rest_parameter"}   # typescript_native_extractors.hpp:112
     - {check: dispatch, language: typescript, literal: "string_literal"}   # typescript_native_extractors.hpp:1066
-    - {check: table, language: php, literal: "argument_name"}   # function_call_extractor.hpp:169
-    - {check: table, language: r, literal: ","}   # function_call_extractor.hpp:214
-    - {check: table, language: r, literal: ";"}   # function_call_extractor.hpp:214
-    - {check: table, language: r, literal: "namespace_get"}   # function_call_extractor.hpp:213
-    - {check: table, language: r, literal: "namespace_get_internal"}   # function_call_extractor.hpp:213
-    - {check: table, language: swift, literal: "init_expression"}   # function_call_extractor.hpp:186
-    - {check: table, language: swift, literal: "labeled_argument"}   # function_call_extractor.hpp:204
+    - {check: table, language: r, literal: ","}   # function_call_extractor.hpp:223
+    - {check: table, language: r, literal: ";"}   # function_call_extractor.hpp:223
+    - {check: table, language: r, literal: "namespace_get"}   # function_call_extractor.hpp:222
+    - {check: table, language: r, literal: "namespace_get_internal"}   # function_call_extractor.hpp:222
+    - {check: table, language: swift, literal: "init_expression"}   # function_call_extractor.hpp:195
+    - {check: table, language: swift, literal: "labeled_argument"}   # function_call_extractor.hpp:213
 
 # Bare name-binding hooks (#64). A plain identifier is generically a
 # NAME_REFERENCE; in some parent contexts it introduces a name instead. Those

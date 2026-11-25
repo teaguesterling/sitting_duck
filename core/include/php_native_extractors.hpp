@@ -41,28 +41,27 @@ struct PHPNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS> {
 	}
 
 public:
-	static string ExtractPHPReturnType(TSNode node, const string &content) {
-		// Look for return type after : in function signature
-		uint32_t child_count = ts_node_child_count(node);
-		for (uint32_t i = 0; i < child_count; i++) {
-			TSNode child = ts_node_child(node, i);
-			const char *child_type = ts_node_type(child);
-
-			if (strcmp(child_type, "primitive_type") == 0 || strcmp(child_type, "return_type") == 0) {
-				uint32_t start = ts_node_start_byte(child);
-				uint32_t end = ts_node_end_byte(child);
-				if (start < content.length() && end <= content.length()) {
-					return content.substr(start, end - start);
-				}
-			} else if (strcmp(child_type, "union_type") == 0 || strcmp(child_type, "intersection_type") == 0) {
-				uint32_t start = ts_node_start_byte(child);
-				uint32_t end = ts_node_end_byte(child);
-				if (start < content.length() && end <= content.length()) {
-					return content.substr(start, end - start);
-				}
-			}
+	// The text of a node's field, or "" when the node has no such field.
+	// tree-sitter-php declares every type position as a field: `type` on a
+	// parameter or property, `return_type` on a function. A field covers every
+	// type form (named, optional, primitive, union, intersection, DNF, bottom),
+	// where matching child node types missed the named and optional ones (#220
+	// shape: `type_declaration` and `return_type` were never node types).
+	static string FieldText(TSNode node, const char *field, const string &content) {
+		TSNode child = ts_node_child_by_field_name(node, field, strlen(field));
+		if (ts_node_is_null(child)) {
+			return "";
 		}
-		return ""; // No return type annotation
+		uint32_t start = ts_node_start_byte(child);
+		uint32_t end = ts_node_end_byte(child);
+		if (start < content.length() && end <= content.length()) {
+			return content.substr(start, end - start);
+		}
+		return "";
+	}
+
+	static string ExtractPHPReturnType(TSNode node, const string &content) {
+		return FieldText(node, "return_type", content); // "" when not annotated
 	}
 
 	static vector<ParameterInfo> ExtractPHPParameters(TSNode node, const string &content) {
@@ -123,6 +122,7 @@ public:
 
 	static ParameterInfo ExtractSimpleParameter(TSNode node, const string &content) {
 		ParameterInfo param;
+		param.type = FieldText(node, "type", content);
 		uint32_t child_count = ts_node_child_count(node);
 
 		for (uint32_t i = 0; i < child_count; i++) {
@@ -136,14 +136,6 @@ public:
 				if (start < content.length() && end <= content.length()) {
 					param.name = content.substr(start, end - start);
 				}
-			} else if (strcmp(child_type, "primitive_type") == 0 || strcmp(child_type, "type_declaration") == 0 ||
-			           strcmp(child_type, "union_type") == 0 || strcmp(child_type, "intersection_type") == 0) {
-				// Parameter type hint
-				uint32_t start = ts_node_start_byte(child);
-				uint32_t end = ts_node_end_byte(child);
-				if (start < content.length() && end <= content.length()) {
-					param.type = content.substr(start, end - start);
-				}
 			} else if (strcmp(child_type, "reference_modifier") == 0) {
 				// Reference parameter: &$param
 				param.annotations = "reference";
@@ -156,6 +148,8 @@ public:
 	static ParameterInfo ExtractOptionalParameter(TSNode node, const string &content) {
 		ParameterInfo param;
 		param.is_optional = true;
+		param.type = FieldText(node, "type", content);
+		TSNode type_node = ts_node_child_by_field_name(node, "type", strlen("type"));
 		uint32_t child_count = ts_node_child_count(node);
 
 		for (uint32_t i = 0; i < child_count; i++) {
@@ -168,12 +162,8 @@ public:
 				if (start < content.length() && end <= content.length()) {
 					param.name = content.substr(start, end - start);
 				}
-			} else if (strcmp(child_type, "primitive_type") == 0 || strcmp(child_type, "type_declaration") == 0) {
-				uint32_t start = ts_node_start_byte(child);
-				uint32_t end = ts_node_end_byte(child);
-				if (start < content.length() && end <= content.length()) {
-					param.type = content.substr(start, end - start);
-				}
+			} else if (!ts_node_is_null(type_node) && ts_node_eq(child, type_node)) {
+				continue; // the type, read from the field above
 			} else if (i > 0 && strcmp(child_type, "=") != 0) {
 				// Default value (skip the = sign)
 				uint32_t start = ts_node_start_byte(child);
@@ -190,6 +180,7 @@ public:
 	static ParameterInfo ExtractVariadicParameter(TSNode node, const string &content) {
 		ParameterInfo param;
 		param.is_variadic = true;
+		param.type = FieldText(node, "type", content);
 		uint32_t child_count = ts_node_child_count(node);
 
 		for (uint32_t i = 0; i < child_count; i++) {
@@ -201,12 +192,6 @@ public:
 				uint32_t end = ts_node_end_byte(child);
 				if (start < content.length() && end <= content.length()) {
 					param.name = content.substr(start, end - start);
-				}
-			} else if (strcmp(child_type, "primitive_type") == 0 || strcmp(child_type, "type_declaration") == 0) {
-				uint32_t start = ts_node_start_byte(child);
-				uint32_t end = ts_node_end_byte(child);
-				if (start < content.length() && end <= content.length()) {
-					param.type = content.substr(start, end - start);
 				}
 			}
 		}
@@ -216,6 +201,7 @@ public:
 
 	static ParameterInfo ExtractPropertyPromotionParameter(TSNode node, const string &content) {
 		ParameterInfo param;
+		param.type = FieldText(node, "type", content);
 		uint32_t child_count = ts_node_child_count(node);
 
 		for (uint32_t i = 0; i < child_count; i++) {
@@ -227,12 +213,6 @@ public:
 				uint32_t end = ts_node_end_byte(child);
 				if (start < content.length() && end <= content.length()) {
 					param.name = content.substr(start, end - start);
-				}
-			} else if (strcmp(child_type, "primitive_type") == 0 || strcmp(child_type, "type_declaration") == 0) {
-				uint32_t start = ts_node_start_byte(child);
-				uint32_t end = ts_node_end_byte(child);
-				if (start < content.length() && end <= content.length()) {
-					param.type = content.substr(start, end - start);
 				}
 			} else if (strcmp(child_type, "visibility_modifier") == 0) {
 				uint32_t start = ts_node_start_byte(child);
@@ -425,23 +405,8 @@ struct PHPNativeExtractor<NativeExtractionStrategy::VARIABLE_WITH_TYPE> {
 
 public:
 	static string ExtractPHPVariableType(TSNode node, const string &content) {
-		// Look for type declaration in property or variable
-		uint32_t child_count = ts_node_child_count(node);
-		for (uint32_t i = 0; i < child_count; i++) {
-			TSNode child = ts_node_child(node, i);
-			const char *child_type = ts_node_type(child);
-
-			if (strcmp(child_type, "type_declaration") == 0 || strcmp(child_type, "union_type") == 0 ||
-			    strcmp(child_type, "intersection_type") == 0) {
-				uint32_t start = ts_node_start_byte(child);
-				uint32_t end = ts_node_end_byte(child);
-				if (start < content.length() && end <= content.length()) {
-					return content.substr(start, end - start);
-				}
-			}
-		}
-
-		return "";
+		// property_declaration carries its type in the `type` field.
+		return PHPNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS>::FieldText(node, "type", content);
 	}
 
 	static vector<string> ExtractPHPVariableModifiers(TSNode node, const string &content) {
