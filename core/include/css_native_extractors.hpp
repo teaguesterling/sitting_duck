@@ -166,7 +166,7 @@ struct CSSNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS> {
 			TSNode child = ts_node_child(node, i);
 			string child_type = ts_node_type(child);
 
-			if (child_type == "feature_name" || child_type == "media_feature_name") {
+			if (child_type == "feature_name") {
 				ParameterInfo feature;
 				feature.name = ExtractNodeText(child, content);
 				feature.type = "MEDIA_FEATURE";
@@ -376,13 +376,17 @@ struct CSSNativeExtractor<NativeExtractionStrategy::VARIABLE_WITH_TYPE> {
 				context.parameters.clear();
 				context.modifiers.push_back("UNIQUE");
 			} else if (node_type == "property_name") {
-				context.signature_type = "PROPERTY";
+				// tree-sitter-css has no `variable_name` node: a custom property
+				// is a property_name whose text starts with `--`.
 				context.parameters.clear();
-				context.modifiers = ExtractPropertyModifiers(node, content);
-			} else if (node_type == "variable_name") {
-				context.signature_type = "CUSTOM_PROPERTY";
-				context.parameters.clear();
-				context.modifiers.push_back("CSS_VARIABLE");
+				uint32_t start = ts_node_start_byte(node);
+				if (start + 1 < content.length() && content.compare(start, 2, "--") == 0) {
+					context.signature_type = "CUSTOM_PROPERTY";
+					context.modifiers.push_back("CSS_VARIABLE");
+				} else {
+					context.signature_type = "PROPERTY";
+					context.modifiers = ExtractPropertyModifiers(node, content);
+				}
 			} else if (node_type == "identifier") {
 				context.signature_type = "IDENTIFIER";
 				context.parameters.clear();

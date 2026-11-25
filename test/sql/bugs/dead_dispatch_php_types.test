@@ -1,0 +1,93 @@
+# name: test/sql/bugs/dead_dispatch_php_types.test
+# description: php class-name types, return types and named arguments are extracted
+# group: [bugs]
+
+# Change 3 of tracker/roadmap/dead-dispatch-plan.md. The php native extractors
+# read types and argument names through three node types that tree-sitter-php
+# never emits. All three are in the spec/abi/module-abi.yaml `dead_dispatch:`
+# baseline:
+#
+#     type_declaration   parameter and property types
+#     return_type        function and method return types
+#     argument_name      the name of a named argument (PHP 8)
+#
+# Measured on build 7ad56b6716: the grammar gives every typed node a `type`
+# field, every function a `return_type` field, and a named `argument` a `name`
+# field. Only primitive_type (and, for some sites, union_type) was matched
+# directly, so a class-name type, a nullable type and a non-primitive return
+# type were all lost:
+#
+#     function f(Foo $a, ?Foo $n): Foo {}   ->  $a: '', $n: '', returns NULL
+#     f(1, name: 2)                          ->  {name: '', type: 'name: 2'}
+
+require sitting_duck
+
+# Parameter types: a class name and a nullable type now survive. A union and a
+# primitive type were already right, and must stay right.
+query II
+SELECT p.name, p.type
+FROM (SELECT unnest(parameters) AS p
+      FROM parse_ast('<?php function f(Foo $a, int|string $u, ?Foo $n, int $d = 1) {}', 'php', context := 'native')
+      WHERE type = 'function_definition');
+----
+$a	Foo
+$u	int|string
+$n	?Foo
+$d	int
+
+# A variadic parameter and a promoted constructor property have the same
+# `type` field.
+query II
+SELECT p.name, p.type
+FROM (SELECT unnest(parameters) AS p
+      FROM parse_ast('<?php class K { function __construct(public Foo $p, Bar ...$xs) {} }', 'php', context := 'native')
+      WHERE type = 'method_declaration');
+----
+$p	Foo
+$xs	Bar
+
+# Return types. `int` was already right; a class name, a nullable type and the
+# bottom type `never` were lost.
+query II
+SELECT name, signature_type
+FROM parse_ast('<?php function a(): int {} function b(): Foo {} function c(): ?Foo {} function d(): never {} function e() {}', 'php', context := 'native')
+WHERE type = 'function_definition'
+ORDER BY node_id;
+----
+a	int
+b	Foo
+c	?Foo
+d	never
+e	NULL
+
+# A method return type, through the same strategy.
+query II
+SELECT name, signature_type
+FROM parse_ast('<?php class K { public function m(): Foo {} }', 'php', context := 'native')
+WHERE type = 'method_declaration';
+----
+m	Foo
+
+# A typed property reports its type. Only a union or intersection type was
+# matched before, so a class name, a primitive and a nullable type were NULL.
+query II
+SELECT type, signature_type
+FROM parse_ast('<?php class K { private Foo $x; public int|string $y; private int $z; private ?Foo $w; }', 'php', context := 'native')
+WHERE type = 'property_declaration'
+ORDER BY node_id;
+----
+property_declaration	Foo
+property_declaration	int|string
+property_declaration	int
+property_declaration	?Foo
+
+# A named argument keeps its name apart from its value, as ruby's `foo(x: 1)`
+# does. A positional argument stays unnamed.
+query II
+SELECT p.name, p.type
+FROM (SELECT unnest(parameters) AS p
+      FROM parse_ast('<?php f(1, name: 2);', 'php', context := 'native')
+      WHERE type = 'function_call_expression');
+----
+(empty)	1
+name	2

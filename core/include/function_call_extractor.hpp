@@ -30,6 +30,14 @@ struct FunctionCallNodeTypes {
 
 	// Named parameter node types (for keyword arguments)
 	vector<const char *> named_parameter_types;
+
+	// A field that names an argument, for a grammar whose named and positional
+	// arguments share one node type. PHP 8: every argument is an `argument`
+	// node, and only a named one has a `name` field. nullptr: not used. This is
+	// opt-in per language, because in other grammars a `name` field on an
+	// argument's node (a qualified_identifier, a struct_expression) is not an
+	// argument name.
+	const char *named_argument_field = nullptr;
 };
 
 // Default node types (most common across languages)
@@ -166,7 +174,8 @@ static const std::unordered_map<string, FunctionCallNodeTypes> LANGUAGE_FUNCTION
          {"name", "variable_name", "member_access_expression"},
          {",", "(", ")", ";"},
          {"member_call_expression", "scoped_call_expression"}, // Additional call types for PHP
-         {"argument_name"}                                     // Named parameter types for PHP 8+
+         {},     // Named arguments are `argument` nodes with a `name` field, as positional ones
+         "name", // are `argument` nodes without it. `argument_name` was never a node type.
      }},
     {"ruby",
      {
@@ -529,9 +538,19 @@ private:
 				}
 			}
 
+			TSNode name_field_node = {};
+			bool has_name_field = false;
+			if (!is_named_param && types.named_argument_field) {
+				name_field_node =
+				    ts_node_child_by_field_name(child, types.named_argument_field, strlen(types.named_argument_field));
+				has_name_field = !ts_node_is_null(name_field_node);
+			}
+
 			if (is_named_param) {
 				// Extract named parameter (key=value pattern)
 				arg = ExtractNamedArgument(child, content);
+			} else if (has_name_field) {
+				arg = ExtractFieldNamedArgument(child, name_field_node, content);
 			} else {
 				// Extract positional argument
 				string arg_text = ExtractNodeText(child, content);
@@ -576,6 +595,21 @@ private:
 			}
 		}
 
+		return param;
+	}
+
+	// A named argument whose name is a field: the name is that field's text, the
+	// value is the text of the named child that is not the name.
+	static ParameterInfo ExtractFieldNamedArgument(TSNode arg_node, TSNode name_node, const string &content) {
+		ParameterInfo param;
+		param.name = ExtractNodeText(name_node, content);
+		uint32_t child_count = ts_node_named_child_count(arg_node);
+		for (uint32_t i = 0; i < child_count; i++) {
+			TSNode child = ts_node_named_child(arg_node, i);
+			if (!ts_node_eq(child, name_node)) {
+				param.type = ExtractNodeText(child, content);
+			}
+		}
 		return param;
 	}
 
