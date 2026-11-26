@@ -171,7 +171,6 @@ public:
 		return param;
 	}
 
-
 	static string ExtractSwiftTypeAnnotation(TSNode node, const string &content) {
 		uint32_t child_count = ts_node_child_count(node);
 
@@ -251,24 +250,61 @@ struct SwiftNativeExtractor<NativeExtractionStrategy::ARROW_FUNCTION> {
 	}
 
 public:
+	// tree-sitter-swift has no `closure_parameters` node. A closure's parameters
+	// sit two levels down, and each is a lambda_parameter, not a `parameter`:
+	//
+	//     lambda_literal
+	//       lambda_function_type
+	//         lambda_function_type_parameters
+	//           lambda_parameter   name: simple_identifier, type: (optional)
 	static vector<ParameterInfo> ExtractSwiftClosureParameters(TSNode node, const string &content) {
 		vector<ParameterInfo> params;
+		TSNode fn_type = FindSwiftChild(node, "lambda_function_type");
+		if (ts_node_is_null(fn_type)) {
+			return params;
+		}
+		TSNode list = FindSwiftChild(fn_type, "lambda_function_type_parameters");
+		if (ts_node_is_null(list)) {
+			return params;
+		}
+		uint32_t child_count = ts_node_child_count(list);
+		for (uint32_t i = 0; i < child_count; i++) {
+			TSNode child = ts_node_child(list, i);
+			if (strcmp(ts_node_type(child), "lambda_parameter") != 0) {
+				continue;
+			}
+			ParameterInfo param;
+			param.name = FieldText(child, "name", content);
+			param.type = FieldText(child, "type", content);
+			if (!param.name.empty()) { // `self` (self_expression) has no name field
+				params.push_back(param);
+			}
+		}
+		return params;
+	}
 
-		// Find closure_parameters node
+	static TSNode FindSwiftChild(TSNode node, const char *type) {
 		uint32_t child_count = ts_node_child_count(node);
 		for (uint32_t i = 0; i < child_count; i++) {
 			TSNode child = ts_node_child(node, i);
-			const char *child_type = ts_node_type(child);
-
-			if (strcmp(child_type, "closure_parameters") == 0) {
-				// Extract parameters from closure_parameters node (same structure as function params)
-				params = SwiftNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS>::ExtractSwiftParameters(
-				    child, content);
-				break;
+			if (strcmp(ts_node_type(child), type) == 0) {
+				return child;
 			}
 		}
+		return TSNode {};
+	}
 
-		return params;
+	static string FieldText(TSNode node, const char *field, const string &content) {
+		TSNode child = ts_node_child_by_field_name(node, field, strlen(field));
+		if (ts_node_is_null(child)) {
+			return "";
+		}
+		uint32_t start = ts_node_start_byte(child);
+		uint32_t end = ts_node_end_byte(child);
+		if (start < content.length() && end <= content.length()) {
+			return content.substr(start, end - start);
+		}
+		return "";
 	}
 
 	static vector<string> ExtractSwiftClosureModifiers(TSNode node, const string &content) {

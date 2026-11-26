@@ -40,6 +40,13 @@ struct FunctionCallNodeTypes {
 	const char *named_argument_field = nullptr;
 };
 
+// The grammar FIELD that holds a named argument's name, in php and swift. It is
+// a constant, not a literal in the table below, because every string in a table
+// entry is a node-type literal that scripts/verify_native_dispatch.py checks
+// against the grammar's symbol table. A field name is not a node type: swift has
+// a `name` field but no `name` node.
+static constexpr const char *ARGUMENT_NAME_FIELD = "name";
+
 // Default node types (most common across languages)
 static const FunctionCallNodeTypes DEFAULT_FUNCTION_CALL_TYPES = {
     "call_expression",
@@ -174,8 +181,8 @@ static const std::unordered_map<string, FunctionCallNodeTypes> LANGUAGE_FUNCTION
          {"name", "variable_name", "member_access_expression"},
          {",", "(", ")", ";"},
          {"member_call_expression", "scoped_call_expression"}, // Additional call types for PHP
-         {},     // Named arguments are `argument` nodes with a `name` field, as positional ones
-         "name", // are `argument` nodes without it. `argument_name` was never a node type.
+         {},                  // Named arguments are `argument` nodes with a `name` field, as positional ones
+         ARGUMENT_NAME_FIELD, // are `argument` nodes without it. `argument_name` was never a node type.
      }},
     {"ruby",
      {
@@ -210,7 +217,8 @@ static const std::unordered_map<string, FunctionCallNodeTypes> LANGUAGE_FUNCTION
          {"identifier", "navigation_expression", "self_expression"},
          {",", "(", ")", ";", ":"},
          {"postfix_expression", "try_expression"}, // Additional call types for Swift
-         {"labeled_argument"}                      // Named parameter types for Swift
+         {},                                       // A labeled argument is a value_argument with a `name` field, as an
+         ARGUMENT_NAME_FIELD, // unlabeled one is a value_argument without it (grammar.js value_argument).
      }},
     {"r",
      {
