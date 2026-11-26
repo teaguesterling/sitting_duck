@@ -48,7 +48,6 @@ typescript	formal_parameters	function_with_params	L5	seen=21 src_params=18 deliv
 tsx	arguments	function_with_params	L5	seen=1 src_params=1 delivered=0	the same javascript_types.def:603 declaration: TSXAdapter inherits TypeScriptAdapter's node table, so it inherits this L5 pair. Counts are low because test/data/tsx/component.tsx is the only tsx fixture
 tsx	formal_parameters	function_with_params	L5	seen=3 src_params=2 delivered=0	the same javascript_types.def:608 declaration, inherited the same way
 css	media_statement	function_with_params	L5	seen=2 src_params=1 delivered=0	declared DEFINITION_CLASS at css_types.def:93; an @media block is not a function and has no parameter list. src_params=1 is the guard matching a word character inside the first parentheses of a media query, not a parameter
-sql	invocation	function_with_params	L5	seen=7 src_params=6 delivered=0	declared COMPUTATION_CALL at sql_adapter.cpp:47; a CALL site. FUNCTION_CALL is the strategy for call arguments, FUNCTION_WITH_PARAMS the one for definitions
 sql	statement	function_with_params	L5	seen=9 src_params=3 delivered=0	declared EXECUTION_STATEMENT at sql_adapter.cpp:144; a generic statement node, with name strategy NONE
 #
 # --- L3: a real declaring node type the specialization does not serve --------
