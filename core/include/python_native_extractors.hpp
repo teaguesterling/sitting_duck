@@ -648,9 +648,6 @@ struct PythonNativeExtractor<NativeExtractionStrategy::VARIABLE_WITH_TYPE> {
 			} else if (node_type == "assignment") {
 				context.signature_type = ExtractAssignmentType(node, content);
 				context.modifiers = ExtractAssignmentModifiers(node, content);
-			} else if (node_type == "annotated_assignment") {
-				context.signature_type = ExtractAnnotatedAssignmentType(node, content);
-				context.modifiers = ExtractAnnotatedAssignmentModifiers(node, content);
 			} else if (node_type == "attribute") {
 				context.signature_type = ExtractAttributeType(node, content);
 				context.modifiers = ExtractAttributeModifiers(node, content);
@@ -742,8 +739,6 @@ private:
 
 			if (parent_type == "typed_parameter") {
 				modifiers.push_back("parameter_type");
-			} else if (parent_type == "annotated_assignment") {
-				modifiers.push_back("variable_type");
 			} else if (parent_type == "function_definition") {
 				modifiers.push_back("return_type");
 			}
@@ -772,8 +767,6 @@ private:
 
 			if (parent_type == "assignment") {
 				return ExtractAssignmentType(parent, content);
-			} else if (parent_type == "annotated_assignment") {
-				return ExtractAnnotatedAssignmentType(parent, content);
 			} else if (parent_type == "type") {
 				// The identifier IS the annotation: `d: float` gives a `type`
 				// node whose only child is the identifier `float`. Falling
@@ -859,9 +852,9 @@ private:
 		// AN ANNOTATION WINS OVER INFERENCE, and this is where it has to be
 		// read. tree-sitter-python emits `assignment` with a `type` child for
 		// `d: float = 1`; it has no `annotated_assignment` node at all -- zero
-		// occurrences in ts_symbol_names[] -- so the branch for that node type
-		// in Extract() above is unreachable, and ExtractAnnotatedAssignmentType
-		// is dead code kept only for a grammar that might emit it.
+		// occurrences in ts_symbol_names[]. The branches that dispatched on that
+		// node type, and the two helpers only they called, were removed with the
+		// dead_dispatch baseline entry (tracker/roadmap/dead-dispatch-plan.md).
 		//
 		// Before this, `d: float = 1` reported `int`, inferred from the 1, and
 		// `y: int` -- which has no value to infer from -- reported the string
@@ -911,39 +904,6 @@ private:
 
 		if (assignment_count > 1) {
 			modifiers.push_back("multiple_assignment");
-		}
-
-		return modifiers;
-	}
-
-	static string ExtractAnnotatedAssignmentType(TSNode node, const string &content) {
-		// For annotated assignments, extract the type annotation
-		uint32_t child_count = ts_node_child_count(node);
-		for (uint32_t i = 0; i < child_count; i++) {
-			TSNode child = ts_node_child(node, i);
-			const char *child_type = ts_node_type(child);
-
-			if (strcmp(child_type, "type") == 0) {
-				return ExtractTypeText(child, content);
-			}
-		}
-
-		return "annotated_assignment";
-	}
-
-	static vector<string> ExtractAnnotatedAssignmentModifiers(TSNode node, const string &content) {
-		vector<string> modifiers;
-		modifiers.push_back("annotated_assignment");
-		modifiers.push_back("type_annotated");
-
-		// Check if it has a value assignment too
-		uint32_t child_count = ts_node_child_count(node);
-		for (uint32_t i = 0; i < child_count; i++) {
-			TSNode child = ts_node_child(node, i);
-			if (strcmp(ts_node_type(child), "=") == 0) {
-				modifiers.push_back("with_value");
-				break;
-			}
 		}
 
 		return modifiers;
@@ -1100,7 +1060,7 @@ struct PythonNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_DECORATORS>
 		try {
 			string node_type = ts_node_type(node);
 
-			if (node_type == "function_definition" || node_type == "async_function_definition") {
+			if (node_type == "function_definition") {
 				// Start with basic function extraction
 				context = PythonNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS>::Extract(node, content);
 
@@ -1117,11 +1077,6 @@ struct PythonNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_DECORATORS>
 					context.signature_type = "decorated_" + context.signature_type;
 				}
 
-				// Handle async functions (dedup: FUNCTION_WITH_PARAMS may already have detected async)
-				if (node_type == "async_function_definition") {
-					context.signature_type = "async_" + context.signature_type;
-					EnsureModifier(context.modifiers, "async", true);
-				}
 			} else if (node_type == "decorated_definition") {
 				context = ExtractDecoratedFunction(node, content);
 			} else {
@@ -1168,12 +1123,6 @@ private:
 
 	static vector<string> ExtractPythonAdvancedModifiers(TSNode node, const string &content) {
 		vector<string> modifiers;
-
-		// Check for function-specific modifiers
-		string node_type = ts_node_type(node);
-		if (node_type == "async_function_definition") {
-			EnsureModifier(modifiers, "async");
-		}
 
 		// Check for special method names
 		string function_name = ExtractFunctionName(node, content);
@@ -1226,7 +1175,7 @@ private:
 			TSNode child = ts_node_child(node, i);
 			string child_type = ts_node_type(child);
 
-			if (child_type == "function_definition" || child_type == "async_function_definition") {
+			if (child_type == "function_definition") {
 				// Extract basic function info
 				context =
 				    PythonNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS>::Extract(child, content);
@@ -1238,11 +1187,6 @@ private:
 				// Enhance signature type
 				if (!decorators.empty()) {
 					context.signature_type = "decorated_" + context.signature_type;
-				}
-
-				if (child_type == "async_function_definition") {
-					context.signature_type = "async_" + context.signature_type;
-					EnsureModifier(context.modifiers, "async", true);
 				}
 
 				break;

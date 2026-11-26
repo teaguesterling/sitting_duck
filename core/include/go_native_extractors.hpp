@@ -60,11 +60,11 @@ private:
 
 			// After we've seen parameter list(s), look for return types
 			if (param_lists_seen > 0) {
-				if (strcmp(child_type, "type_identifier") == 0 || strcmp(child_type, "primitive_type") == 0 ||
-				    strcmp(child_type, "pointer_type") == 0 || strcmp(child_type, "slice_type") == 0 ||
-				    strcmp(child_type, "array_type") == 0 || strcmp(child_type, "map_type") == 0 ||
-				    strcmp(child_type, "channel_type") == 0 || strcmp(child_type, "interface_type") == 0 ||
-				    strcmp(child_type, "struct_type") == 0 || strcmp(child_type, "qualified_type") == 0) {
+				if (strcmp(child_type, "type_identifier") == 0 || strcmp(child_type, "pointer_type") == 0 ||
+				    strcmp(child_type, "slice_type") == 0 || strcmp(child_type, "array_type") == 0 ||
+				    strcmp(child_type, "map_type") == 0 || strcmp(child_type, "channel_type") == 0 ||
+				    strcmp(child_type, "interface_type") == 0 || strcmp(child_type, "struct_type") == 0 ||
+				    strcmp(child_type, "qualified_type") == 0) {
 					// Single return type
 					uint32_t start = ts_node_start_byte(child);
 					uint32_t end = ts_node_end_byte(child);
@@ -189,11 +189,10 @@ private:
 				if (start < content.length() && end <= content.length()) {
 					param_names.push_back(content.substr(start, end - start));
 				}
-			} else if (strcmp(child_type, "type_identifier") == 0 || strcmp(child_type, "primitive_type") == 0 ||
-			           strcmp(child_type, "pointer_type") == 0 || strcmp(child_type, "slice_type") == 0 ||
-			           strcmp(child_type, "array_type") == 0 || strcmp(child_type, "map_type") == 0 ||
-			           strcmp(child_type, "channel_type") == 0 || strcmp(child_type, "interface_type") == 0 ||
-			           strcmp(child_type, "struct_type") == 0) {
+			} else if (strcmp(child_type, "type_identifier") == 0 || strcmp(child_type, "pointer_type") == 0 ||
+			           strcmp(child_type, "slice_type") == 0 || strcmp(child_type, "array_type") == 0 ||
+			           strcmp(child_type, "map_type") == 0 || strcmp(child_type, "channel_type") == 0 ||
+			           strcmp(child_type, "interface_type") == 0 || strcmp(child_type, "struct_type") == 0) {
 				// Parameter type
 				uint32_t start = ts_node_start_byte(child);
 				uint32_t end = ts_node_end_byte(child);
@@ -398,11 +397,10 @@ private:
 			TSNode child = ts_node_child(node, i);
 			const char *child_type = ts_node_type(child);
 
-			if (strcmp(child_type, "type_identifier") == 0 || strcmp(child_type, "primitive_type") == 0 ||
-			    strcmp(child_type, "pointer_type") == 0 || strcmp(child_type, "slice_type") == 0 ||
-			    strcmp(child_type, "array_type") == 0 || strcmp(child_type, "map_type") == 0 ||
-			    strcmp(child_type, "channel_type") == 0 || strcmp(child_type, "interface_type") == 0 ||
-			    strcmp(child_type, "struct_type") == 0) {
+			if (strcmp(child_type, "type_identifier") == 0 || strcmp(child_type, "pointer_type") == 0 ||
+			    strcmp(child_type, "slice_type") == 0 || strcmp(child_type, "array_type") == 0 ||
+			    strcmp(child_type, "map_type") == 0 || strcmp(child_type, "channel_type") == 0 ||
+			    strcmp(child_type, "interface_type") == 0 || strcmp(child_type, "struct_type") == 0) {
 				uint32_t start = ts_node_start_byte(child);
 				uint32_t end = ts_node_end_byte(child);
 				if (start < content.length() && end <= content.length()) {

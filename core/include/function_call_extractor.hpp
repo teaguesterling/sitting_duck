@@ -144,8 +144,8 @@ static const std::unordered_map<string, FunctionCallNodeTypes> LANGUAGE_FUNCTION
          "field_initializer_list",
          {"identifier", "scoped_identifier", "field_identifier", "field_expression"},
          {",", "(", ")", ";", "{", "}", "!"},
-         {"method_call_expression", "macro_invocation"}, // Additional call types for Rust
-         {}                                              // No named parameter types for Rust (uses struct syntax)
+         {"macro_invocation"}, // A method call is a call_expression over a field_expression
+         {}                    // No named parameter types for Rust (uses struct syntax)
      }},
     {"java",
      {
@@ -193,8 +193,8 @@ static const std::unordered_map<string, FunctionCallNodeTypes> LANGUAGE_FUNCTION
          "argument_list",
          {"identifier", "constant", "scope_resolution"},
          {",", "(", ")", ";"},
-         {"method_call", "chained_call"}, // Additional call types for Ruby
-         {"pair", "keyword_parameter"}    // Named parameter types for Ruby (keyword arguments)
+         {},                           // A method call or a chained call is a plain `call` in tree-sitter-ruby
+         {"pair", "keyword_parameter"} // Named parameter types for Ruby (keyword arguments)
      }},
     {"swift",
      {
@@ -227,8 +227,10 @@ static const std::unordered_map<string, FunctionCallNodeTypes> LANGUAGE_FUNCTION
          nullptr,
          "arguments",
          "arguments",
-         {"identifier", "namespace_get", "namespace_get_internal"},
-         {",", "(", ")", ";"},
+         // `pkg::f` and `pkg:::f` are one namespace_operator node (lhs, `::` or
+         // `:::`, rhs). The separator is a `comma` node; r has no `;` symbol.
+         {"identifier", "namespace_operator"},
+         {"comma", "(", ")"},
          {}, // No additional call types for R
          {}  // No named parameter types for R (uses positional arguments)
      }},
