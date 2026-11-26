@@ -27,8 +27,12 @@
 #                                                               own name form)
 #
 # A declaration of two properties (`public static $c, $d;`) is named by the
-# first, as typescript's `let a = 1, b = 2` is named `a`. A single-valued name
-# column cannot hold both; tracker/roadmap/v1.18.3-survey.md drift note 6.
+# first: a single-valued name column cannot hold both
+# (tracker/roadmap/v1.18.3-survey.md drift note 6). The declaration's name is
+# not where the BINDINGS come from, though. As typescript's `let a = 1, b = 2`
+# gives the lexical_declaration the name `a` and each variable_declarator its
+# own name, each php property_element is a binding of its own, so
+# ast_definitions() returns $c AND $d (#288: every bound name, once).
 #
 # Out of scope here, measured on the same build: const_declaration and
 # const_element also report an empty name.
@@ -64,3 +68,27 @@ ORDER BY node_id;
 ----
 property_declaration	$p
 simple_parameter	$p
+
+# Every property is a binding, once (#288's rule). The declaration and its
+# first property have the same name, so they collapse into one row; the second
+# property is its own row. Before property_element was a binding, $d was lost.
+statement ok
+CREATE TABLE php_props AS SELECT * FROM parse_ast('<?php class C { public static $c, $d; public $a; }', 'php');
+
+query TT rowsort
+SELECT name, definition_type FROM ast_definitions_from('php_props');
+----
+$a	variable
+$c	variable
+$d	variable
+C	class
+
+# The typescript shape this follows, on the same build.
+statement ok
+CREATE TABLE ts_decls AS SELECT * FROM parse_ast('let a = 1, b = 2;', 'typescript');
+
+query TT rowsort
+SELECT name, definition_type FROM ast_definitions_from('ts_decls');
+----
+a	variable
+b	variable
