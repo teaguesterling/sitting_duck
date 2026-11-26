@@ -1,0 +1,67 @@
+# name: test/sql/bugs/dead_dispatch_r_named_arguments.test
+# description: r named call arguments are split into name and value
+# group: [bugs]
+
+# Finding B after the dead-dispatch worklist (tracker/roadmap/dead-dispatch-plan.md).
+# tree-sitter-r has one `argument` node for both forms of argument. A named one
+# has a `name` field and an optional `value` field (grammar.js `_argument_named`,
+# so `f(d = )` is valid R). The r entry of the shared call table
+# (function_call_extractor.hpp) does not use named_argument_field, so every
+# argument is taken as positional and its whole text becomes the type.
+#
+# Measured on build c4a5dc69bf (the same tree as main 89820bd9ab):
+#
+#     r       f(a = 1, 2)      -> [{'name': '', 'type': 'a = 1'}, {'name': '', 'type': 2}]
+#     python  f(2, a=1)        -> keyword_argument: name a, type 1 (the oracle)
+#
+# The `argument` row itself already has name 'a'; only the call's parameters
+# list is wrong.
+
+require sitting_duck
+
+# A named argument: the name is the name, the value is the type. A positional
+# argument stays as it was: no name, the text as the type.
+query II
+SELECT name, parameters
+FROM parse_ast(E'f(a = 1, 2)\ng(x, y = "s")\n', 'r', context := 'native')
+WHERE type = 'call'
+ORDER BY node_id;
+----
+f	[{'name': a, 'type': 1}, {'name': '', 'type': 2}]
+g	[{'name': '', 'type': x}, {'name': y, 'type': '"s"'}]
+
+# The tell, without knowing the right answer: no argument's type may contain
+# the `=` that separates a name from its value.
+query I
+SELECT count(*) FROM (
+    SELECT unnest(parameters) AS p
+    FROM parse_ast(E'f(a = 1, `b c` = 2, "s" = 3, d = )\n', 'r', context := 'native')
+    WHERE type = 'call'
+) WHERE p.type LIKE '%=%';
+----
+0
+
+# The other name forms the grammar allows: a backquoted name, a string name,
+# and a name with no value. The name is the source text of the `name` field.
+query II
+SELECT p.name, p.type FROM (
+    SELECT unnest(parameters) AS p
+    FROM parse_ast(E'f(a = 1, `b c` = 2, "s" = 3, d = )\n', 'r', context := 'native')
+    WHERE type = 'call'
+);
+----
+a	1
+`b c`	2
+"s"	3
+d	(empty)
+
+# The oracle: python's keyword argument gives the same split.
+query II
+SELECT p.name, p.type FROM (
+    SELECT unnest(parameters) AS p
+    FROM parse_ast('f(2, a=1)', 'python', context := 'native')
+    WHERE type = 'call'
+);
+----
+(empty)	2
+a	1
