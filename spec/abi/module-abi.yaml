@@ -338,10 +338,6 @@ native_extraction:
     - {check: dispatch, language: typescript, literal: "number_literal"}   # typescript_native_extractors.hpp:1064
     - {check: dispatch, language: typescript, literal: "rest_parameter"}   # typescript_native_extractors.hpp:112
     - {check: dispatch, language: typescript, literal: "string_literal"}   # typescript_native_extractors.hpp:1066
-    - {check: table, language: r, literal: ","}   # function_call_extractor.hpp:223
-    - {check: table, language: r, literal: ";"}   # function_call_extractor.hpp:223
-    - {check: table, language: r, literal: "namespace_get"}   # function_call_extractor.hpp:222
-    - {check: table, language: r, literal: "namespace_get_internal"}   # function_call_extractor.hpp:222
     - {check: table, language: swift, literal: "init_expression"}   # function_call_extractor.hpp:195
     - {check: table, language: swift, literal: "labeled_argument"}   # function_call_extractor.hpp:213
 
