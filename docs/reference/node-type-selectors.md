@@ -68,7 +68,9 @@ no node in the input has, such as the typo `function_defintion`, is not an
 error. It matches nothing, the same as a real type with no match in the input
 ([#313](https://github.com/teaguesterling/sitting_duck/issues/313)).
 
-Each selector position gives the result for "no node has this type":
+The positions below give these results for "no node has this type". A form
+that the engine refuses, such as a combinator inside `:has()` or `:not()`
+(for example `:has(> zzz)`), raises its own error instead.
 
 | Selector | Result |
 |---|---|
