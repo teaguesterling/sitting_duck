@@ -137,8 +137,8 @@ static const std::unordered_map<string, FunctionCallNodeTypes> LANGUAGE_FUNCTION
          "field_initializer_list",
          {"identifier", "scoped_identifier", "field_identifier", "field_expression"},
          {",", "(", ")", ";", "{", "}", "!"},
-         {"method_call_expression", "macro_invocation"}, // Additional call types for Rust
-         {}                                              // No named parameter types for Rust (uses struct syntax)
+         {"macro_invocation"}, // A method call is a call_expression over a field_expression
+         {}                    // No named parameter types for Rust (uses struct syntax)
      }},
     {"java",
      {
@@ -186,8 +186,8 @@ static const std::unordered_map<string, FunctionCallNodeTypes> LANGUAGE_FUNCTION
          "argument_list",
          {"identifier", "constant", "scope_resolution"},
          {",", "(", ")", ";"},
-         {"method_call", "chained_call"}, // Additional call types for Ruby
-         {"pair", "keyword_parameter"}    // Named parameter types for Ruby (keyword arguments)
+         {},                           // A method call or a chained call is a plain `call` in tree-sitter-ruby
+         {"pair", "keyword_parameter"} // Named parameter types for Ruby (keyword arguments)
      }},
     {"swift",
      {

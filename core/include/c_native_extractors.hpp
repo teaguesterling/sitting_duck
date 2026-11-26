@@ -223,8 +223,7 @@ public:
 				TSNode sibling = ts_node_child(parent, i);
 				const char *sibling_type = ts_node_type(sibling);
 
-				if (strcmp(sibling_type, "storage_class_specifier") == 0 ||
-				    strcmp(sibling_type, "function_specifier") == 0) {
+				if (strcmp(sibling_type, "storage_class_specifier") == 0) {
 					uint32_t start = ts_node_start_byte(sibling);
 					uint32_t end = ts_node_end_byte(sibling);
 					if (start < content.length() && end <= content.length()) {

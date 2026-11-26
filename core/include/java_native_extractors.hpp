@@ -13,10 +13,10 @@ namespace duckdb {
 // Helper to check if a node type is a Java type node (return type, parameter type, etc.)
 // Covers all Java tree-sitter type nodes: reference types, primitives, generics, arrays
 inline bool IsJavaTypeNode(const char *child_type) {
-	return strcmp(child_type, "type_identifier") == 0 || strcmp(child_type, "primitive_type") == 0 ||
-	       strcmp(child_type, "integral_type") == 0 || strcmp(child_type, "floating_point_type") == 0 ||
-	       strcmp(child_type, "boolean_type") == 0 || strcmp(child_type, "generic_type") == 0 ||
-	       strcmp(child_type, "array_type") == 0 || strcmp(child_type, "void_type") == 0;
+	return strcmp(child_type, "type_identifier") == 0 || strcmp(child_type, "integral_type") == 0 ||
+	       strcmp(child_type, "floating_point_type") == 0 || strcmp(child_type, "boolean_type") == 0 ||
+	       strcmp(child_type, "generic_type") == 0 || strcmp(child_type, "array_type") == 0 ||
+	       strcmp(child_type, "void_type") == 0;
 }
 
 // Base template for Java extractors - default returns empty context
@@ -710,9 +710,6 @@ struct JavaNativeExtractor<NativeExtractionStrategy::VARIABLE_WITH_TYPE> {
 			} else if (node_type == "type_identifier") {
 				context.signature_type = ExtractJavaTypeIdentifierInfo(node, content);
 				context.modifiers.push_back("type_reference");
-			} else if (node_type == "primitive_type") {
-				context.signature_type = ExtractNodeText(node, content);
-				context.modifiers.push_back("primitive");
 			} else if (node_type == "generic_type") {
 				context.signature_type = ExtractNodeText(node, content);
 				context.modifiers.push_back("generic");

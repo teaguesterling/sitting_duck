@@ -751,7 +751,7 @@ private:
 
 			// Function specifiers and qualifiers that appear before function_declarator
 			if (strcmp(child_type, "storage_class_specifier") == 0 || strcmp(child_type, "type_qualifier") == 0 ||
-			    strcmp(child_type, "function_specifier") == 0 || strcmp(child_type, "virtual_specifier") == 0 ||
+			    strcmp(child_type, "virtual_specifier") == 0 ||
 			    strcmp(child_type, "explicit_function_specifier") == 0) {
 				uint32_t start = ts_node_start_byte(child);
 				uint32_t end = ts_node_end_byte(child);
