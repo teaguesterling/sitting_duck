@@ -1,0 +1,66 @@
+# name: test/sql/bugs/dead_dispatch_php_property_name.test
+# description: a php property declaration is named by its property
+# group: [bugs]
+
+# Finding C after the dead-dispatch worklist (tracker/roadmap/dead-dispatch-plan.md).
+# php_types.def gives property_declaration FIND_IDENTIFIER. That strategy looks
+# for a `variable_name` among the node's children ("PHP params/properties" in
+# FindIdentifierInChildren), but tree-sitter-php wraps each property in a
+# `property_element`:
+#
+#     public $a = 1;
+#
+#     property_declaration
+#       visibility_modifier
+#       property_element
+#         variable_name($a)
+#         property_initializer
+#
+# property_element is not in the shared wrapper list that FIND_IDENTIFIER
+# descends through (FindIdentifierInWrappers), so nothing is found.
+#
+# Measured on build c4a5dc69bf (the same tree as main 89820bd9ab):
+#
+#     public $a = 1;            -> property_declaration name ''
+#     private int $b;           -> property_declaration name '' (signature_type int)
+#     function f(int $p) {}     -> simple_parameter name '$p'   (the oracle: php's
+#                                                               own name form)
+#
+# A declaration of two properties (`public static $c, $d;`) is named by the
+# first, as typescript's `let a = 1, b = 2` is named `a`. A single-valued name
+# column cannot hold both; tracker/roadmap/v1.18.3-survey.md drift note 6.
+#
+# Out of scope here, measured on the same build: const_declaration and
+# const_element also report an empty name.
+
+require sitting_duck
+
+query II
+SELECT name, signature_type
+FROM parse_ast('<?php class C { public $a = 1; private int $b; protected Foo $f; public static $c, $d; }', 'php', context := 'native')
+WHERE type = 'property_declaration'
+ORDER BY node_id;
+----
+$a	NULL
+$b	int
+$f	Foo
+$c	NULL
+
+# The intent, without the expected spelling: no property declaration is
+# unnamed, and none takes its type's name.
+query I
+SELECT count(*)
+FROM parse_ast('<?php class C { public $a = 1; private int $b; protected Foo $f; public static $c, $d; }', 'php', context := 'native')
+WHERE type = 'property_declaration' AND (name = '' OR name IS NULL OR name IN ('int', 'Foo'));
+----
+0
+
+# The name has the same form as a parameter's name, which was already right.
+query II
+SELECT type, name
+FROM parse_ast('<?php class C { public $p; function f(int $p) {} }', 'php', context := 'native')
+WHERE type IN ('property_declaration', 'simple_parameter')
+ORDER BY node_id;
+----
+property_declaration	$p
+simple_parameter	$p

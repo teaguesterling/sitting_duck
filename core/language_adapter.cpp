@@ -390,9 +390,14 @@ string LanguageAdapter::FindIdentifierInWrappers(TSNode node, const string &cont
 	//     array_pattern, object_pattern or list_pattern -- and none of those is in this
 	//     list, so FindIdentifierInWrappers stops before it gets there.
 	// Net reach: one node type, two languages.
+	//
+	// `property_element` was measured the same way: only tree-sitter-php emits it
+	// (php and php_only), and its only owner is `property_declaration`, which
+	// declares find_identifier. Before it was added every php property was unnamed.
 	static const vector<string> wrapper_types = {
 	    "variable_declarator",             // JS, C#, TypeScript
 	    "rest_pattern",                    // TypeScript/tsx `...c: number[]` (#320)
+	    "property_element",                // PHP (inside property_declaration)
 	    "variable_list",                   // Lua (inside assignment_statement)
 	    "assignment_statement",            // Lua (inside variable_declaration)
 	    "init_declarator",                 // C++
