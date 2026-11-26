@@ -40,7 +40,7 @@ struct FunctionCallNodeTypes {
 	const char *named_argument_field = nullptr;
 };
 
-// The grammar FIELD that holds a named argument's name, in php and swift. It is
+// The grammar FIELD that holds a named argument's name, in php, swift and r. It is
 // a constant, not a literal in the table below, because every string in a table
 // entry is a node-type literal that scripts/verify_native_dispatch.py checks
 // against the grammar's symbol table. A field name is not a node type: swift has
@@ -231,8 +231,9 @@ static const std::unordered_map<string, FunctionCallNodeTypes> LANGUAGE_FUNCTION
          // `:::`, rhs). The separator is a `comma` node; r has no `;` symbol.
          {"identifier", "namespace_operator"},
          {"comma", "(", ")"},
-         {}, // No additional call types for R
-         {}  // No named parameter types for R (uses positional arguments)
+         {},                  // No additional call types for R
+         {},                  // A named argument is an `argument` with a `name` field, as a positional one
+         ARGUMENT_NAME_FIELD, // is an `argument` without it (grammar.js `_argument_named`).
      }},
     {"kotlin",
      {
