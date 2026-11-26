@@ -1,0 +1,70 @@
+# name: test/sql/bugs/dead_dispatch_ts_declarator_value.test
+# description: a typescript declarator's value identifier does not take the declared type
+# group: [bugs]
+
+# Finding A after the dead-dispatch worklist (tracker/roadmap/dead-dispatch-plan.md).
+# ExtractIdentifierType in typescript_native_extractors.hpp types an identifier
+# from its parent. For a parent `variable_declarator` it returns the
+# declarator's annotation, without a check of WHICH child the identifier is.
+# A declarator has a `name` field and a `value` field:
+#
+#     let x: number = y;
+#
+#     variable_declarator
+#       name: identifier(x)
+#       type: type_annotation(number)
+#       value: identifier(y)
+#
+# Measured on build c4a5dc69bf (the same tree as main 89820bd9ab):
+#
+#     x  -> signature_type 'number'     (right: x is declared number)
+#     y  -> signature_type 'number'     (wrong: y is a value, its type is unknown)
+#
+# The rule is the one change 2 pinned for a parameter's default value
+# (dead_dispatch_ts_parameter_identifier.test): only the NAME takes the declared
+# type, and the value identifier keeps the fallback 'identifier'.
+#
+# Out of scope here: the value identifier also gets the `variable_name`
+# modifier (ExtractIdentifierModifiers has the same unchecked parent test).
+
+require sitting_duck
+
+# The name takes the declared type. The value does not.
+query II
+SELECT name, signature_type
+FROM parse_ast('let x: number = y;', 'typescript', context := 'native')
+WHERE type = 'identifier'
+ORDER BY node_id;
+----
+x	number
+y	identifier
+
+# The intent, without the fallback spelling: no value identifier may report a
+# type that the source declares for a different name.
+query I
+SELECT count(*)
+FROM parse_ast('let x: number = y; const q: string = r; var s: Foo = t;', 'typescript', context := 'native')
+WHERE type = 'identifier' AND name IN ('y', 'r', 't')
+  AND signature_type IN ('number', 'string', 'Foo');
+----
+0
+
+# An untyped declarator: the value identifier is typed by the same rule.
+query II
+SELECT name, signature_type
+FROM parse_ast('let z = w;', 'typescript', context := 'native')
+WHERE type = 'identifier'
+ORDER BY node_id;
+----
+z	NULL
+w	identifier
+
+# The declarator rows themselves were already right; the fix must not move them.
+query II
+SELECT name, signature_type
+FROM parse_ast('let x: number = y; let n: Foo = bar();', 'typescript', context := 'native')
+WHERE type = 'variable_declarator'
+ORDER BY node_id;
+----
+x	number
+n	Foo

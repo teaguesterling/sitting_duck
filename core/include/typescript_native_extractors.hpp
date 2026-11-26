@@ -857,7 +857,13 @@ public:
 			string parent_type = ts_node_type(parent);
 
 			if (parent_type == "variable_declarator") {
-				return ExtractVariableType(parent, content);
+				// Only the declarator's NAME takes the declared type. In
+				// `let x: number = y` the value `y` is a child identifier too, but
+				// its type is not known: it keeps the fallback below.
+				TSNode name = ts_node_child_by_field_name(parent, "name", strlen("name"));
+				if (!ts_node_is_null(name) && ts_node_eq(name, node)) {
+					return ExtractVariableType(parent, content);
+				}
 			} else if (parent_type == "type_annotation") {
 				return ExtractTypeFromAnnotation(parent, content);
 			} else if (parent_type == "property_signature") {
