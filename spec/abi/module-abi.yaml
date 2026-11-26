@@ -323,14 +323,13 @@ native_extraction:
     - {check: dispatch, language: sql, literal: "insert_statement"}   # sql_native_extractors.hpp:76
     - {check: dispatch, language: sql, literal: "select_statement"}   # sql_native_extractors.hpp:72
     - {check: dispatch, language: sql, literal: "update_statement"}   # sql_native_extractors.hpp:80
-    - {check: dispatch, language: swift, literal: "access_level_modifier"}   # swift_native_extractors.hpp:211
-    - {check: dispatch, language: swift, literal: "closure_parameters"}   # swift_native_extractors.hpp:263
+    - {check: dispatch, language: swift, literal: "access_level_modifier"}   # swift_native_extractors.hpp:210
     - {check: dispatch, language: swift, literal: "default_parameter_clause"}   # swift_native_extractors.hpp:150
     - {check: dispatch, language: swift, literal: "enum_declaration"}   # swift_adapter.cpp:82
-    - {check: dispatch, language: swift, literal: "generic_type"}   # swift_native_extractors.hpp:373
-    - {check: dispatch, language: swift, literal: "rethrows"}   # swift_native_extractors.hpp:222
+    - {check: dispatch, language: swift, literal: "generic_type"}   # swift_native_extractors.hpp:409
+    - {check: dispatch, language: swift, literal: "rethrows"}   # swift_native_extractors.hpp:221
     - {check: dispatch, language: swift, literal: "struct_declaration"}   # swift_adapter.cpp:81
-    - {check: dispatch, language: swift, literal: "type_inheritance_clause"}   # swift_native_extractors.hpp:353
+    - {check: dispatch, language: swift, literal: "type_inheritance_clause"}   # swift_native_extractors.hpp:389
     - {check: dispatch, language: swift, literal: "variable_declaration"}   # swift_adapter.cpp:85
     - {check: dispatch, language: typescript, literal: "field_declaration"}   # typescript_native_extractors.hpp:776
     - {check: dispatch, language: typescript, literal: "module_declaration"}   # typescript_native_extractors.hpp:452
@@ -338,8 +337,7 @@ native_extraction:
     - {check: dispatch, language: typescript, literal: "number_literal"}   # typescript_native_extractors.hpp:1064
     - {check: dispatch, language: typescript, literal: "rest_parameter"}   # typescript_native_extractors.hpp:112
     - {check: dispatch, language: typescript, literal: "string_literal"}   # typescript_native_extractors.hpp:1066
-    - {check: table, language: swift, literal: "init_expression"}   # function_call_extractor.hpp:195
-    - {check: table, language: swift, literal: "labeled_argument"}   # function_call_extractor.hpp:213
+    - {check: table, language: swift, literal: "init_expression"}   # function_call_extractor.hpp:202
 
 # Bare name-binding hooks (#64). A plain identifier is generically a
 # NAME_REFERENCE; in some parent contexts it introduces a name instead. Those

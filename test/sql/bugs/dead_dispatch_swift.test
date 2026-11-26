@@ -1,0 +1,39 @@
+# name: test/sql/bugs/dead_dispatch_swift.test
+# description: swift closure parameters and labeled call arguments are extracted
+# group: [bugs]
+
+# Change 6 of tracker/roadmap/dead-dispatch-plan.md. Two swift extractors name
+# node types tree-sitter-swift never emits. Both are in the
+# spec/abi/module-abi.yaml `dead_dispatch:` baseline:
+#
+#     closure_parameters   the grammar emits lambda_function_type >
+#                          lambda_function_type_parameters > lambda_parameter
+#     labeled_argument     a labeled argument is a value_argument with a
+#                          `name` field (grammar.js: value_argument)
+#
+# Measured on main 82e0e3d:
+#
+#     { (a: Int, b: String) -> Int in a }   -> closure, parameters []
+#     { x, y in x }                         -> closure, parameters []
+#     foo(label: 1, 2)                      -> [{name: '', type: 'label: 1'}, {name: '', type: 2}]
+
+require sitting_duck
+
+# A closure reports its parameters, typed or not.
+query II
+SELECT signature_type, parameters
+FROM parse_ast(E'let c = { (a: Int, b: String) -> Int in a }\nlet d = { x, y in x }\n', 'swift', context := 'native')
+WHERE type = 'lambda_literal'
+ORDER BY node_id;
+----
+closure	[{'name': a, 'type': Int}, {'name': b, 'type': String}]
+closure	[{'name': x, 'type': ''}, {'name': y, 'type': ''}]
+
+# A labeled argument keeps its label apart from its value. A positional
+# argument stays unnamed.
+query I
+SELECT parameters
+FROM parse_ast(E'foo(label: 1, 2)\n', 'swift', context := 'native')
+WHERE type = 'call_expression';
+----
+[{'name': label, 'type': 1}, {'name': '', 'type': 2}]
