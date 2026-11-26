@@ -61,6 +61,45 @@ method_definition         -- exactly this type
 class_declaration         -- exactly this type (JS/TS)
 ```
 
+## A node type that does not exist matches nothing
+
+The engine does not check a bare node type against the grammar. A type that
+no node in the input has, such as the typo `function_defintion`, is not an
+error. It matches nothing, the same as a real type with no match in the input
+([#313](https://github.com/teaguesterling/sitting_duck/issues/313)).
+
+Each selector position gives the result for "no node has this type":
+
+| Selector | Result |
+|---|---|
+| `function_defintion`, `zzz#f` | 0 rows |
+| `module > zzz`, `zzz function_definition` | 0 rows |
+| `function_definition:has(zzz)` | 0 rows |
+| `function_definition:precedes(zzz)`, `:follows(zzz)` | 0 rows |
+| `identifier:in-scope(zzz)` | 0 rows |
+| `function_definition:not(zzz)` | every `function_definition` |
+| `function_definition, zzz` | the `function_definition` rows only |
+
+Measured on main `69284f1` against `test/data/python/sample_app.py`, which
+has 20 `function_definition` nodes.
+
+So a typo cannot be told apart from a true negative. Under `:not()`, a typo
+matches every candidate. In a selector list, a typo drops its own item.
+
+To check a type, look for it in the input before you trust a 0:
+
+```sql
+SELECT count(*) FROM read_ast('src/**/*.py') WHERE type = 'function_defintion';
+-- 0: the type is misspelt, or the input has none of it
+```
+
+`ast_type_map()` is not a complete list of types. It lists only the types
+that a language configures, so a real type can be missing from it (for
+example, Java `switch_block`).
+
+The `:calls()` and `:called-by()` arguments are names, not types. This note
+does not apply to them.
+
 ## Discovering Node Types
 
 Use `ast_type_map()` to explore what node types are available and how they map to semantic categories:
