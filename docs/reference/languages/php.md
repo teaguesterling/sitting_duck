@@ -102,6 +102,7 @@ PHP variable characteristics: - All variables prefixed with `$` - No explicit de
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
 | `property_declaration` | DEFINITION_VARIABLE \| Variable::FIELD | FIND_IDENTIFIER | Property declaration - class member variable |
+| `property_element` | DEFINITION_VARIABLE \| Variable::FIELD | FIND_IDENTIFIER | One property of a property declaration - `$c` and `$d` in `public static $c, $d;` |
 | `const_declaration` | DEFINITION_VARIABLE \| Variable::IMMUTABLE | FIND_IDENTIFIER | Constant declaration - `const NAME = value;` |
 | `global_declaration` | DEFINITION_VARIABLE \| Variable::MUTABLE | FIND_IDENTIFIER | Global variable declaration - `global $var;` |
 | `static_variable_declaration` | DEFINITION_VARIABLE \| Variable::MUTABLE | FIND_IDENTIFIER | Static variable - `static $var = value;` |

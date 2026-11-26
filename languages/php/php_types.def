@@ -170,6 +170,12 @@ DEF_TYPE("arrow_function", DEFINITION_FUNCTION | SemanticRefinements::Function::
 /// @brief Property declaration - class member variable
 DEF_TYPE("property_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::NAME_DEFINITION)
 
+/// @brief One property of a property declaration - `$c` and `$d` in `public static $c, $d;`
+/// Each is a binding of its own, as a typescript variable_declarator is, so a
+/// declaration of two properties binds both names. The declaration's own name is
+/// its first property's (FIND_IDENTIFIER descends into this wrapper).
+DEF_TYPE("property_element", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION)
+
 /// @brief Constant declaration - `const NAME = value;`
 DEF_TYPE("const_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::IMMUTABLE, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION)
 
