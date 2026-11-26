@@ -219,8 +219,10 @@ static const std::unordered_map<string, FunctionCallNodeTypes> LANGUAGE_FUNCTION
          nullptr,
          "arguments",
          "arguments",
-         {"identifier", "namespace_get", "namespace_get_internal"},
-         {",", "(", ")", ";"},
+         // `pkg::f` and `pkg:::f` are one namespace_operator node (lhs, `::` or
+         // `:::`, rhs). The separator is a `comma` node; r has no `;` symbol.
+         {"identifier", "namespace_operator"},
+         {"comma", "(", ")"},
          {}, // No additional call types for R
          {}  // No named parameter types for R (uses positional arguments)
      }},

@@ -1,0 +1,31 @@
+# name: test/sql/bugs/dead_dispatch_r_calls.test
+# description: r namespaced calls are named, and the comma is not an argument
+# group: [bugs]
+
+# Change 7 of tracker/roadmap/dead-dispatch-plan.md. The r entry of the shared
+# call table (function_call_extractor.hpp) names node types tree-sitter-r never
+# emits. All are in the spec/abi/module-abi.yaml `dead_dispatch:` baseline:
+#
+#     namespace_get, namespace_get_internal   the grammar emits namespace_operator
+#                                             (lhs, operator `::` or `:::`, rhs)
+#     ","                                     the separator is a `comma` node
+#     ";"                                     no such symbol in the grammar
+#
+# Measured on build 6c971a037f:
+#
+#     base::paste(1, 2)   -> name '', arguments [1, ',', 2]
+#     base:::f(1)         -> name ''
+
+require sitting_duck
+
+# A namespaced call is named by its function, as a plain call is. The comma is
+# punctuation, not an argument.
+query II
+SELECT name, parameters
+FROM parse_ast(E'base::paste(1, 2)\nbase:::f(1)\ng(a, b)\n', 'r', context := 'native')
+WHERE type = 'call'
+ORDER BY node_id;
+----
+paste	[{'name': '', 'type': 1}, {'name': '', 'type': 2}]
+f	[{'name': '', 'type': 1}]
+g	[{'name': '', 'type': a}, {'name': '', 'type': b}]
